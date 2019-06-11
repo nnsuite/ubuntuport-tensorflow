@@ -26,11 +26,15 @@ namespace tflite {
 class BaseOperator;
 
 // Return a map contained all know TF Lite Operators, keyed by their names.
-std::map<string, std::unique_ptr<BaseOperator>> BuildOperatorByNameMap();
+// TODO(ycling): The pattern to propagate parameters (e.g. allow_flex_ops)
+// is ugly here. Consider refactoring.
+std::map<string, std::unique_ptr<BaseOperator>> BuildOperatorByNameMap(
+    bool allow_flex_ops = false);
 
 // Return a map contained all know TF Lite Operators, keyed by the type of
 // their tf.mini counterparts.
-std::map<OperatorType, std::unique_ptr<BaseOperator>> BuildOperatorByTypeMap();
+std::map<OperatorType, std::unique_ptr<BaseOperator>> BuildOperatorByTypeMap(
+    bool allow_flex_ops = false);
 
 // These are the flatbuffer types for custom and builtin options.
 using CustomOptions = flatbuffers::Vector<uint8_t>;
@@ -86,6 +90,17 @@ class BaseOperator {
   // * When multiple versions are defined for an op, this function need to be
   //   overridden. (See example in `operator_test.cc`)
   virtual int GetVersion(const Operator& op) const = 0;
+
+  // Given a Toco `Operator`, return a list of booleans indicating the op
+  // mutates which input variables.
+  // * If the op mutates any input variables, it should return a list of bool
+  //   with the same length as inputs.
+  // * Otherwise, it will return an empty list.
+  virtual std::vector<bool> GetMutatingInputVariables(
+      const Operator& op) const {
+    // Most ops don't have variable tensors. This function can be overridden.
+    return std::vector<bool>();
+  }
 
  private:
   string name_;

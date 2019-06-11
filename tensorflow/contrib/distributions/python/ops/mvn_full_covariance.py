@@ -24,6 +24,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import check_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import linalg_ops
+from tensorflow.python.util import deprecation
 
 
 __all__ = [
@@ -72,7 +73,8 @@ class MultivariateNormalFullCovariance(mvn_tril.MultivariateNormalTriL):
   #### Examples
 
   ```python
-  tfd = tf.contrib.distributions
+  import tensorflow_probability as tfp
+  tfd = tfp.distributions
 
   # Initialize a single 3-variate Gaussian.
   mu = [1., 2, 3]
@@ -112,6 +114,14 @@ class MultivariateNormalFullCovariance(mvn_tril.MultivariateNormalTriL):
 
   """
 
+  @deprecation.deprecated(
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
+      "TensorFlow Probability "
+      "(https://github.com/tensorflow/probability). You "
+      "should update all references to use `tfp.distributions` "
+      "instead of `tf.contrib.distributions`.",
+      warn_once=True)
   def __init__(self,
                loc=None,
                covariance_matrix=None,

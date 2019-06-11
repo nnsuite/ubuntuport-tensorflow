@@ -14,8 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include <string.h>
 #include <vector>
-#include "tensorflow/contrib/lite/builtin_op_data.h"
-#include "tensorflow/contrib/lite/context.h"
+#include "tensorflow/contrib/lite/c/builtin_op_data.h"
+#include "tensorflow/contrib/lite/c/c_api_internal.h"
 #include "tensorflow/contrib/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/contrib/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/contrib/lite/kernels/internal/tensor.h"
@@ -92,8 +92,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                       op_context.constant_values->type);
   }
 
-  // TODO(nupurgarg): Our current implementations rely on the inputs being 4D.
-  TF_LITE_ENSURE_EQ(context, op_context.dims, 4);
+  // TODO(nupurgarg): Current implementations rely on the inputs being <= 4D.
+  TF_LITE_ENSURE(context, op_context.dims <= 4);
 
   // Exit early if paddings is a non-const tensor. Set output tensor to
   // dynamic so output size can be determined in Eval.
@@ -128,18 +128,28 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   // TODO(nupurgarg): Change kernel implementation to use padding arrays in
   // forward order (depth, width, height, batch).
   // Build paddings in order of int[] = {batch, height, width, depth} to match
-  // kernel implementation of Pad in referenced_ops.h and optimized_ops.h.
+  // kernel implementation of Pad in reference_ops.h and optimized_ops.h.
   for (int idx = op_context.dims - 1; idx >= 0; --idx) {
     before_padding.push_back(paddings_data[idx * 2]);
     after_padding.push_back(paddings_data[idx * 2 + 1]);
   }
 
-#define TF_LITE_PAD(type, scalar, pad_value)                                  \
-  type::PadV2(GetTensorData<scalar>(op_context.input),                        \
-              GetTensorDims(op_context.input), before_padding, after_padding, \
-              GetTensorData<scalar>(op_context.output),                       \
-              GetTensorDims(op_context.output), pad_value)
-
+#define TF_LITE_PAD(type, scalar, pad_value)                             \
+  TF_LITE_ENSURE(context, before_padding.size() <= 4);                   \
+  TF_LITE_ENSURE(context, after_padding.size() <= 4);                    \
+  tflite::PadParams op_params;                                           \
+  op_params.left_padding_count = before_padding.size();                  \
+  op_params.right_padding_count = after_padding.size();                  \
+  for (int i = 0; i < op_context.dims; ++i) {                            \
+    op_params.left_padding[i] = before_padding[op_context.dims - 1 - i]; \
+    op_params.right_padding[i] = after_padding[op_context.dims - 1 - i]; \
+  }                                                                      \
+  const scalar pad_value_copy = pad_value;                               \
+                                                                         \
+  type::Pad(op_params, GetTensorShape(op_context.input),                 \
+            GetTensorData<scalar>(op_context.input), &pad_value_copy,    \
+            GetTensorShape(op_context.output),                           \
+            GetTensorData<scalar>(op_context.output))
   switch (op_context.input->type) {
     case kTfLiteFloat32: {
       float pad_value = op_context.constant_values == nullptr

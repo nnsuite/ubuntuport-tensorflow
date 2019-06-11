@@ -18,6 +18,7 @@ limitations under the License.
 #include <memory>
 #include <string>
 
+#include "absl/types/span.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -27,7 +28,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
-#include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/platform/logging.h"
 
 namespace xla {
@@ -71,31 +71,37 @@ Status InlinerVisitor::HandleMap(HloInstruction* map) {
   // profitability model for inlining is defined.
   if (hlo_query::AllOperandsAreParameters(root)) {
     if (root.opcode() == HloOpcode::kFusion ||
-        root.opcode() == HloOpcode::kParameter ||
         root.opcode() == HloOpcode::kTrace) {
       // Cloning not supported for these instructions.
       return Status::OK();
     }
     VLOG(10) << "inlining map({X ... Y}, op) => : op(X ... Y) with function "
              << root.ToShortString();
-    // If the input is a constant then the shape of the constant could be
-    // different than the map shape. Hence, a broadcast is needed, else the
-    // cloned operand with new shape and operands work.
-    if (root.opcode() != HloOpcode::kConstant) {
+    if (root.opcode() == HloOpcode::kParameter) {
+      // If the root is a parameter, then use the corresponding operand as the
+      // result of the computation.
+      TF_RETURN_IF_ERROR(
+          map->ReplaceAllUsesWith(map->operands()[root.parameter_number()]));
+      TF_RETURN_IF_ERROR(computation_->RemoveInstruction(map));
+    } else if (root.opcode() == HloOpcode::kConstant) {
+      // If the input is a constant then the shape of the constant could be
+      // different than the map shape. Hence, a broadcast is needed, else the
+      // cloned operand with new shape and operands work.
+      //
+      // The constant is in an embedded computation and needs to be recreated
+      // as part of the computation that the broadcast is inserted into.
+      HloInstruction* constant = computation_->AddInstruction(root.Clone());
+      HloInstruction* placed_instruction = computation_->AddInstruction(
+          HloInstruction::CreateBroadcast(map->shape(), constant, {}));
+      TF_RETURN_IF_ERROR(
+          computation_->ReplaceInstruction(map, placed_instruction));
+    } else {
       std::vector<HloInstruction*> params;
       for (int64 o = 0; o < root.operands().size(); o++) {
         params.push_back(map->operands()[root.operand(o)->parameter_number()]);
       }
       HloInstruction* placed_instruction = computation_->AddInstruction(
           root.CloneWithNewOperands(map->shape(), params));
-      TF_RETURN_IF_ERROR(
-          computation_->ReplaceInstruction(map, placed_instruction));
-    } else {
-      // The constant is in an embedded computation and needs to be recreated
-      // as part of the computation that the broadcast is inserted into.
-      HloInstruction* constant = computation_->AddInstruction(root.Clone());
-      HloInstruction* placed_instruction = computation_->AddInstruction(
-          HloInstruction::CreateBroadcast(map->shape(), constant, {}));
       TF_RETURN_IF_ERROR(
           computation_->ReplaceInstruction(map, placed_instruction));
     }

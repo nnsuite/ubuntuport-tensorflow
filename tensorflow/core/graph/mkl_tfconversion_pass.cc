@@ -18,7 +18,6 @@ limitations under the License.
 #include <memory>
 #include <queue>
 #include <set>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -134,7 +133,9 @@ class MklToTfConversionPass : public GraphOptimizationPass {
 // complete picture of inputs and outputs of the nodes in the graphs.
 const OptimizationPassRegistry::Grouping kMklTfConvPassGroup =
     OptimizationPassRegistry::POST_PARTITIONING;
+#ifdef ENABLE_MKL
 REGISTER_OPTIMIZATION(kMklTfConvPassGroup, 2, MklToTfConversionPass);
+#endif  // ENABLE_MKL
 
 Status MklToTfConversionPass::InsertConversionNodeOnEdge(
     std::unique_ptr<Graph>* g, Edge* e) {
@@ -176,7 +177,11 @@ Status MklToTfConversionPass::InsertConversionNodeOnEdge(
           .Finalize(&**g, &conversion_node));
 
   CHECK_NOTNULL(conversion_node);
-  if (GetNodeAttr(src->def(), "data_format", &data_format) == Status::OK()) {
+  // TODO(Intel-tf) MklToTf accepts only NHWC or NCHW, but doesn't seem to be
+  // using data_format. This code might be redundant.
+  if (GetNodeAttr(src->def(), "data_format", &data_format) == Status::OK() &&
+      (data_format == ToString(FORMAT_NHWC) ||
+       data_format == ToString(FORMAT_NCHW))) {
     conversion_node->AddAttr("data_format", data_format);
   }
 
@@ -255,9 +260,13 @@ Status MklToTfConversionPass::InsertInputConversionNode(
     }
   }
 
+  // TODO(Intel-tf) MklInputConversion accepts only NHWC or NCHW, but doesn't
+  // seem to be using data_format. This code might be redundant.
   string data_format;
   if (GetNodeAttr(edges[0]->src()->def(), "data_format", &data_format) ==
-      Status::OK()) {
+          Status::OK() &&
+      (data_format == ToString(FORMAT_NHWC) ||
+       data_format == ToString(FORMAT_NCHW))) {
     conversion_node->AddAttr("data_format", data_format);
   }
 

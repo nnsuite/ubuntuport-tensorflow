@@ -25,6 +25,8 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/xla/service/computation_layout.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -38,8 +40,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
-#include "tensorflow/core/lib/gtl/flatmap.h"
-#include "tensorflow/core/lib/gtl/flatset.h"
 #include "tensorflow/core/platform/types.h"
 
 namespace xla {
@@ -228,8 +228,8 @@ class LayoutConstraints {
   // Array-shaped buffers which have not yet been constrained.
   std::set<LogicalBuffer::Id> unconstrained_buffer_ids_;
 
-  mutable tensorflow::gtl::FlatMap<const HloInstruction*,
-                                   std::unique_ptr<PointsToSet::BufferSet>>
+  mutable absl::flat_hash_map<const HloInstruction*,
+                              std::unique_ptr<PointsToSet::BufferSet>>
       buffer_sets_cache_;
 
   HloComputation* computation_;
@@ -249,25 +249,30 @@ class ChannelLayoutConstraints {
   // Given `shape`, apply the layout for `channel_id`. `channel_id` must already
   // be constrained.
   Shape LayoutShapeForChannel(Shape shape, int64 channel_id) const {
-    CHECK(IsChannelConstrained(channel_id));
-    *shape.mutable_layout() = constraints_.at(channel_id);
+    auto it = constraints_.find(channel_id);
+    CHECK(it != constraints_.end()) << "Channel " << channel_id;
+    *shape.mutable_layout() = it->second;
     return shape;
   }
 
   // Returns the layout constraint for `channel_id`, which must already be
   // constrained.
-  Layout LayoutForChannel(int64 channel_id) const {
-    CHECK(IsChannelConstrained(channel_id));
-    return constraints_.at(channel_id);
+  const Layout& LayoutForChannel(int64 channel_id) const {
+    auto it = constraints_.find(channel_id);
+    CHECK(it != constraints_.end()) << "Channel " << channel_id;
+    return it->second;
   }
 
   // Adds a new layout constraint for `channel_id`. If a constraint for
-  // `channel_id` already exists, this operation requires that the new layout is
-  // the same as the previously constrained layout.
-  void ConstrainChannel(int64 channel_id, const Layout& layout) {
-    CHECK(!IsChannelConstrained(channel_id) ||
-          LayoutUtil::Equal(layout, constraints_[channel_id]));
-    constraints_[channel_id] = layout;
+  // `channel_id` has been added, this API returns nullptr, otherwise returns
+  // the layout which has already been set for the channel.
+  const Layout* ConstrainChannel(int64 channel_id, const Layout& layout) {
+    auto it = constraints_.emplace(std::make_pair(channel_id, layout));
+    if (it.second) {
+      return nullptr;
+    }
+    return LayoutUtil::Equal(layout, it.first->second) ? nullptr
+                                                       : &it.first->second;
   }
 
  private:
@@ -276,10 +281,15 @@ class ChannelLayoutConstraints {
 
 // HLO pass which assigns layouts to all instructions in the HLO module while
 // satisfying all necessary invariants and minimizing cost.
-class LayoutAssignment : public HloPassInterface {
+class LayoutAssignment : public HloModulePass {
  public:
   // entry_computation_layout is modified to populate a layout for the result in
   // the case that no particular layout is requested.
+  //
+  // instruction_can_change_layout_func is a function object that determines
+  // whether an instruction can change layouts. An instruction not being able to
+  // change layout means that it requires operands with the same rank as the
+  // output to have the same layout as the output.
   //
   // channel_constraints is both an input and output. Any sends or recvs that
   // are present in channel_constraints will be laid out as constrained. Any
@@ -290,13 +300,20 @@ class LayoutAssignment : public HloPassInterface {
   // within any module passed to `Run`.
   explicit LayoutAssignment(
       ComputationLayout* entry_computation_layout,
+      std::function<bool(const HloInstruction*)>
+          instruction_can_change_layout_func = InstructionCanChangeLayout,
       ChannelLayoutConstraints* channel_constraints = nullptr);
   ~LayoutAssignment() override {}
-  tensorflow::StringPiece name() const override { return "layout-assignment"; }
+  absl::string_view name() const override { return "layout-assignment"; }
 
   // Assign layouts to the given module. Returns whether the module was changed
   // (any layouts were changed).
   StatusOr<bool> Run(HloModule* module) override;
+
+  // Determines whether an instruction can change layouts. An instruction not
+  // being able to change layout means that it requires operands with the same
+  // rank as the output to have the same layout as the output.
+  static bool InstructionCanChangeLayout(const HloInstruction* instruction);
 
  protected:
   // These methods, invoked by PropagateConstraints, propagate a layout
@@ -427,7 +444,12 @@ class LayoutAssignment : public HloPassInterface {
   Status PropagateComputationLayouts(HloComputation* computation,
                                      ComputationLayout* computation_layout);
 
+  // The pointer to the ComputationLayout passed as constructor parameter.
   ComputationLayout* entry_computation_layout_;
+
+  // A copy of entry_computation_layout_ used to reset it to the initial values
+  // during the multiple passes done by the layout assignment operation.
+  ComputationLayout saved_entry_computation_layout_;
 
  protected:
   // Sets up the copy instruction according to the characteristic (sharding,
@@ -464,6 +486,23 @@ class LayoutAssignment : public HloPassInterface {
   // itself).
   Status AddCopyForOperand(HloInstruction* instruction, int64 operand_number);
 
+  // Apply the channel layout constraints by populating the channel_constraints
+  // data structure passed in at constructor time. Eventually adds copies in
+  // case two ends of a channel ended up with a different leyout.
+  Status ConstrainChannelLayouts(HloComputation* computation,
+                                 ChannelLayoutConstraints* channel_constraints);
+
+  // Resets the input ChannelLayoutConstraints to the original copy received
+  // from the constructor input.
+  void ResetChannelConstraints() {
+    if (channel_layout_constraints_ != nullptr) {
+      *channel_layout_constraints_ = channel_constraints_;
+    }
+  }
+
+  // Adds constraints related to host Send/Recv instructions.
+  Status BuildHostChannelConstraints(HloComputation* computation);
+
   // Map containing the layouts of all computations assigned so
   // far. Computations are handled in a topological sort where computations are
   // handled before their caller instructions so the layouts of caller
@@ -472,9 +511,27 @@ class LayoutAssignment : public HloPassInterface {
 
   // Every copy added to the module by the layout assignment pass is registered
   // here.
-  tensorflow::gtl::FlatSet<HloInstruction*> added_copies_;
+  absl::flat_hash_set<HloInstruction*> added_copies_;
 
-  ChannelLayoutConstraints* channel_layout_constraints_;
+  // The pointer to the channel layout constraints passed in with the
+  // constructor. If not nullptr, this is an input/output argument.
+  ChannelLayoutConstraints* channel_layout_constraints_ = nullptr;
+
+  // A copy of the input layout constraints used to reset the above pointer in
+  // case we have to undo operations due to the multiple passes over the
+  // computations/instructions.
+  ChannelLayoutConstraints channel_constraints_;
+
+  // Layout constraints for send/recv instructions which communicate with the
+  // host.
+  ChannelLayoutConstraints host_channel_constraints_;
+
+  // The set of HLO instructions which lacked any layout constraint, thus
+  // receiving propagated default layouts.
+  absl::flat_hash_set<const HloInstruction*> unconstrained_layout_instructions_;
+
+  std::function<bool(const HloInstruction*)>
+      instruction_can_change_layout_func_;
 };
 
 }  // namespace xla

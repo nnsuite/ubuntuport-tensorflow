@@ -37,6 +37,11 @@ Scope& Scope::operator=(const Scope& other) {
   return *this;
 }
 
+namespace {
+const char kScopeSeparator[] = "/";
+const char kSuffixSeparator[] = "_";
+}  // namespace
+
 Scope::Impl::Impl(Graph* graph, Status* status, NameMap* name_map,
                   ShapeRefiner* refiner, bool disable_shape_inference)
     : graph_(graph),
@@ -57,7 +62,7 @@ Scope::Impl::Impl(const std::shared_ptr<Graph>& graph,
       refiner_(refiner),
       scope_used_(nullptr),
       colocation_constraints_(),
-      disable_shape_inference_(false) {}
+      disable_shape_inference_(refiner_ == nullptr) {}
 
 Scope Scope::NewRootScope() {
   Graph* graph = new Graph(OpRegistry::Global());
@@ -89,6 +94,7 @@ Scope::Impl::Impl(const Scope& other, Tags::ScopeName, const string& name,
       exit_on_error_(other.impl()->exit_on_error_),
       kernel_label_(other.impl()->kernel_label_),
       device_(other.impl()->device_),
+      assigned_device_(other.impl()->assigned_device_),
       colocation_constraints_(other.impl()->colocation_constraints_),
       disable_shape_inference_(other.impl()->disable_shape_inference_) {}
 
@@ -105,6 +111,7 @@ Scope::Impl::Impl(const Scope& other, Tags::OpName, const string& name,
       exit_on_error_(other.impl()->exit_on_error_),
       kernel_label_(other.impl()->kernel_label_),
       device_(other.impl()->device_),
+      assigned_device_(other.impl()->assigned_device_),
       colocation_constraints_(other.impl()->colocation_constraints_),
       disable_shape_inference_(other.impl()->disable_shape_inference_) {}
 
@@ -127,6 +134,7 @@ Scope::Impl::Impl(const Scope& other, Tags::ControlDeps,
       exit_on_error_(other.impl()->exit_on_error_),
       kernel_label_(other.impl()->kernel_label_),
       device_(other.impl()->device_),
+      assigned_device_(other.impl()->assigned_device_),
       colocation_constraints_(other.impl()->colocation_constraints_),
       disable_shape_inference_(other.impl()->disable_shape_inference_) {}
 
@@ -158,6 +166,7 @@ Scope::Impl::Impl(const Scope& other, Tags::SingleUseScope,
       exit_on_error_(other.impl()->exit_on_error_),
       kernel_label_(other.impl()->kernel_label_),
       device_(other.impl()->device_),
+      assigned_device_(other.impl()->assigned_device_),
       colocation_constraints_(other.impl()->colocation_constraints_),
       disable_shape_inference_(other.impl()->disable_shape_inference_) {}
 
@@ -173,6 +182,7 @@ Scope::Impl::Impl(const Scope& other, Tags::ExitOnError)
       exit_on_error_(true),
       kernel_label_(other.impl()->kernel_label_),
       device_(other.impl()->device_),
+      assigned_device_(other.impl()->assigned_device_),
       colocation_constraints_(other.impl()->colocation_constraints_),
       disable_shape_inference_(other.impl()->disable_shape_inference_) {}
 
@@ -189,6 +199,7 @@ Scope::Impl::Impl(const Scope& other, Tags::KernelLabel,
       exit_on_error_(other.impl()->exit_on_error_),
       kernel_label_(kernel_label),
       device_(other.impl()->device_),
+      assigned_device_(other.impl()->assigned_device_),
       colocation_constraints_(other.impl()->colocation_constraints_),
       disable_shape_inference_(other.impl()->disable_shape_inference_) {}
 
@@ -205,10 +216,28 @@ Scope::Impl::Impl(const Scope& other, Tags::Colocate,
       exit_on_error_(other.impl()->exit_on_error_),
       kernel_label_(other.impl()->kernel_label_),
       device_(other.impl()->device_),
+      assigned_device_(other.impl()->assigned_device_),
       colocation_constraints_(
           clear_colocations
               ? std::unordered_set<string>()
               : other.impl()->GetColocationConstraints(colocate_with_op)),
+      disable_shape_inference_(other.impl()->disable_shape_inference_) {}
+
+Scope::Impl::Impl(const Scope& other, Tags::AssignedDevice,
+                  const string& assigned_device)
+    : graph_(other.impl()->graph_),
+      status_(other.impl()->status_),
+      name_map_(other.impl()->name_map_),
+      refiner_(other.impl()->refiner_),
+      scope_used_(other.impl()->scope_used_),
+      control_deps_(other.impl()->control_deps_),
+      name_(other.impl()->name_),
+      op_name_(other.impl()->op_name_),
+      exit_on_error_(other.impl()->exit_on_error_),
+      kernel_label_(other.impl()->kernel_label_),
+      device_(other.impl()->device_),
+      assigned_device_(assigned_device),
+      colocation_constraints_(other.impl()->colocation_constraints_),
       disable_shape_inference_(other.impl()->disable_shape_inference_) {}
 
 std::unordered_set<string> Scope::Impl::GetColocationConstraints(
@@ -220,7 +249,7 @@ std::unordered_set<string> Scope::Impl::GetColocationConstraints(
     for (const string& entry : node_constraints) {
       StringPiece s(entry);
       if (str_util::ConsumePrefix(&s, kColocationGroupPrefix)) {
-        current_constraints.insert(std::string(s));
+        current_constraints.emplace(s);
       }
     }
   } else {
@@ -294,6 +323,9 @@ void Scope::UpdateBuilder(NodeBuilder* builder) const {
   if (!impl()->device_.empty()) {
     builder->Device(impl()->device_);
   }
+  if (!impl()->assigned_device_.empty()) {
+    builder->AssignedDevice(impl()->assigned_device_);
+  }
 }
 
 string Scope::Impl::GetUniqueName(const string& prefix,
@@ -308,19 +340,23 @@ string Scope::Impl::GetUniqueName(const string& prefix,
     return prefix;
   }
   auto entry = name_map_->find(prefix);
-  string unique_name = prefix;
   if (entry == name_map_->end()) {
     name_map_->insert({prefix, 0});
-  } else {
-    unique_name = strings::StrCat(unique_name, "_", ++entry->second);
+    return prefix;
   }
+  string unique_name;
+  do {
+    unique_name = strings::StrCat(prefix, kSuffixSeparator, ++entry->second);
+  } while (name_map_->find(unique_name) != name_map_->end());
+  name_map_->insert({unique_name, 0});
   return unique_name;
 }
 
 string Scope::Impl::GetNameForOp(const string& default_name) const {
   const string unique_name =
       GetUniqueName(default_name, true /* check_single_use */);
-  const string sep = name_.empty() || unique_name.empty() ? "" : "/";
+  const string sep =
+      name_.empty() || unique_name.empty() ? "" : kScopeSeparator;
   return strings::StrCat(name_, sep, unique_name);
 }
 
@@ -345,7 +381,8 @@ Scope Scope::NewSubScope(const string& child_scope_name) const {
   }
   const string unique_name =
       impl()->GetUniqueName(child_scope_name, false /* check_single_use */);
-  const string sep = impl()->name_.empty() || unique_name.empty() ? "" : "/";
+  const string sep =
+      impl()->name_.empty() || unique_name.empty() ? "" : kScopeSeparator;
   return Scope(new Impl(*this, Impl::Tags::ScopeName(),
                         strings::StrCat(impl()->name_, sep, unique_name),
                         false /* copy_names */));
@@ -384,6 +421,10 @@ Scope Scope::WithDevice(const string& device) const {
   return Scope(new Impl(*this, Impl::Tags::Device(), device));
 }
 
+Scope Scope::WithAssignedDevice(const string& assigned_device) const {
+  return Scope(new Impl(*this, Impl::Tags::AssignedDevice(), assigned_device));
+}
+
 Scope Scope::ColocateWith(const Operation& op) const {
   return Scope(new Impl(*this, Impl::Tags::Colocate(), op,
                         /* clear_colocations */ false));
@@ -412,7 +453,7 @@ CompositeOpScopes Scope::GetCompositeOpScopes(
   if (!impl()->single_use_scope()) {
     Scope child = NewSubScope(impl()->op_name_.empty() ? composite_op_name
                                                        : impl()->op_name_);
-    const string child_op_sep = impl()->name_.empty() ? "" : "_";
+    const string child_op_sep = impl()->name_.empty() ? "" : kSuffixSeparator;
     const string child_name =
         strings::StrCat(impl()->name_, child_op_sep, child.impl()->name_);
     return {child,
@@ -435,7 +476,13 @@ class InternalScope {
   static Scope NewScope(Graph* graph, Status* status, ShapeRefiner* refiner) {
     Scope::Impl::NameMap* name_map = new Scope::Impl::NameMap;
     for (const Node* node : graph->nodes()) {
-      (*name_map)[node->name()] = 0;
+      const string& name = node->name();
+      (*name_map)[name] = 0;
+      // Add all name prefixes ('/' separated).
+      size_t idx = -1;
+      while ((idx = name.find(kScopeSeparator, idx + 1)) != string::npos) {
+        (*name_map)[name.substr(0, idx)] = 0;
+      }
     }
     // We provide null destructors for these shared ptrs (except for name_map)
     // since the caller owns them and doesn't want the scope to destroy them.

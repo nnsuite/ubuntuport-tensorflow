@@ -40,6 +40,7 @@ from six.moves.urllib.error import URLError
 from six.moves.urllib.request import urlopen
 
 from tensorflow.python.keras.utils.generic_utils import Progbar
+from tensorflow.python.util import tf_inspect
 from tensorflow.python.util.tf_export import tf_export
 
 
@@ -91,6 +92,11 @@ if sys.version_info[0] == 2:
         fd.write(chunk)
 else:
   from six.moves.urllib.request import urlretrieve
+
+
+def is_generator_or_sequence(x):
+  """Check if `x` is a Keras generator type."""
+  return tf_inspect.isgenerator(x) or isinstance(x, Sequence)
 
 
 def _extract_archive(file_path, path='.', archive_format='auto'):
@@ -324,12 +330,12 @@ def validate_file(fpath, file_hash, algorithm='auto', chunk_size=65535):
 class Sequence(object):
   """Base object for fitting to a sequence of data, such as a dataset.
 
-  Every `Sequence` must implements the `__getitem__` and the `__len__` methods.
+  Every `Sequence` must implement the `__getitem__` and the `__len__` methods.
   If you want to modify your dataset between epochs you may implement
   `on_epoch_end`.
   The method `__getitem__` should return a complete batch.
 
-  # Notes
+  Notes:
 
   `Sequence` are a safer way to do multiprocessing. This structure guarantees
   that the network will only train once
@@ -494,6 +500,7 @@ class SequenceEnqueuer(object):
     raise NotImplementedError
 
 
+@tf_export('keras.utils.OrderedEnqueuer')
 class OrderedEnqueuer(SequenceEnqueuer):
   """Builds a Enqueuer from a Sequence.
 
@@ -550,7 +557,7 @@ class OrderedEnqueuer(SequenceEnqueuer):
       self.executor_fn = lambda seqs: multiprocessing.Pool(  # pylint: disable=g-long-lambda
           workers, initializer=init_pool, initargs=(seqs,))
     else:
-       # We do not need the init since it's threads.
+      # We do not need the init since it's threads.
       self.executor_fn = lambda _: ThreadPool(workers)
     self.workers = workers
     self.queue = queue.Queue(max_queue_size)

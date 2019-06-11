@@ -39,6 +39,7 @@ from tensorflow.python.ops import check_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import string_ops
+from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import test
 from tensorflow.python.saved_model import signature_constants
@@ -259,7 +260,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         features={'x': np.array(((30.,), (42.,),))},
         mode=model_fn.ModeKeys.PREDICT,
         logits=logits_placeholder)
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(errors.OpError, 'logits shape'):
         spec.predictions[prediction_keys.PredictionKeys.PROBABILITIES].eval({
             logits_placeholder: logits_2x2
@@ -292,7 +293,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_placeholder,
         labels=labels_placeholder)[0]
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           r'\[expected_labels_shape: \] \[2 1\] \[labels_shape: \] \[2 2\]'):
@@ -346,14 +347,14 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_placeholder,
         labels=labels_placeholder)[0]
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesOpError('Labels must <= n_classes - 1'):
         training_loss.eval({
             labels_placeholder: labels_2x1_with_large_id,
             logits_placeholder: logits_2x3
         })
 
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesOpError('Labels must >= 0'):
         training_loss.eval({
             labels_placeholder: labels_2x1_with_negative_id,
@@ -412,7 +413,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_placeholder,
         labels=labels_placeholder)[0]
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           r'\[expected_labels_shape: \] \[2 1\] \[labels_shape: \] \[3 1\]'):
@@ -448,7 +449,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         spec.export_outputs.keys())
 
     # Assert predictions and export_outputs.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       predictions = sess.run(spec.predictions)
@@ -483,7 +484,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.PREDICT,
         logits=logits)
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertAllEqual(
           expected_classes,
@@ -509,7 +510,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.PREDICT,
         logits=logits)
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       predictions = sess.run(spec.predictions)
       self.assertAllClose(logits,
@@ -533,7 +534,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=1e-2, atol=1e-2)
@@ -560,7 +561,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_input,
         labels=labels_input)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(np.sum(loss), actual_training_loss.eval())
 
@@ -580,7 +581,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -631,7 +632,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, and metrics.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -697,7 +698,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, and metrics.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -726,7 +727,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=1e-2, atol=1e-2)
@@ -754,7 +755,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
     }
 
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
       update_ops = {k: spec.eval_metric_ops[k][1] for k in spec.eval_metric_ops}
@@ -803,7 +804,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert loss, and metrics.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -836,7 +837,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         logits=logits,
         labels=labels)
     tol = 1e-2
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=tol, atol=tol)
@@ -865,7 +866,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         logits=logits,
         labels=labels)
     tol = 1e-2
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=tol, atol=tol)
@@ -920,7 +921,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, train_op, and summaries.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((spec.loss, spec.train_op,
@@ -961,13 +962,42 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         optimizer=_Optimizer())
 
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAllClose(expected_loss, loss, rtol=tol, atol=tol)
       self.assertEqual(
           six.b('{0:s}{1:.2f}'.format(expected_train_result, expected_loss)),
           train_result)
+
+  def test_train_with_update_ops(self):
+    n_classes = 3
+    head = head_lib._multi_class_head_with_softmax_cross_entropy_loss(n_classes)
+
+    with ops.Graph().as_default():
+      w = variables.Variable(1)
+      update_op = w.assign_add(1)
+      ops.add_to_collection(ops.GraphKeys.UPDATE_OPS, update_op)
+
+      t = variables.Variable('')
+      expected_train_result = b'my_train_op'
+      def _train_op_fn(loss):
+        del loss
+        return t.assign(expected_train_result)
+
+      spec = head.create_estimator_spec(
+          features={'x': np.array(((42,),), dtype=np.int32)},
+          mode=model_fn.ModeKeys.TRAIN,
+          logits=np.array(((10, 0, 0), (0, 10, 0),), dtype=np.float32),
+          labels=np.array(((1,), (1,)), dtype=np.int64),
+          train_op_fn=_train_op_fn)
+
+      with self.cached_session() as sess:
+        _initialize_variables(self, spec.scaffold)
+        sess.run(spec.train_op)
+        w_value, t_value = sess.run([w, t])
+        self.assertEqual(2, w_value)
+        self.assertEqual(expected_train_result, t_value)
 
   def test_train_summaries_with_head_name(self):
     n_classes = 3
@@ -993,7 +1023,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert summaries.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       summary_str = sess.run(spec.scaffold.summary_op)
@@ -1034,7 +1064,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, train_op, and summaries.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((spec.loss, spec.train_op,
@@ -1074,7 +1104,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         logits=logits,
         labels=labels_rank_1)
     tol = 1e-2
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=tol, atol=tol)
@@ -1123,7 +1153,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, train_op, and summaries.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((spec.loss, spec.train_op,
@@ -1153,7 +1183,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=1e-2, atol=1e-2)
@@ -1181,7 +1211,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         train_op_fn=_train_op_fn)
 
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss = sess.run(spec.loss)
       self.assertAllClose(expected_loss, loss, rtol=tol, atol=tol)
@@ -1223,7 +1253,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, train_op, and summaries.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((spec.loss, spec.train_op,
@@ -1262,7 +1292,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         logits=logits,
         labels=labels)
     tol = 1e-2
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=tol, atol=tol)
@@ -1297,7 +1327,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, train_op, and summaries.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAllClose(expected_loss, loss, rtol=tol, atol=tol)
@@ -1323,7 +1353,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         logits=logits,
         labels=labels,
         train_op_fn=_no_op_train_fn)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -1350,7 +1380,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
         logits=logits,
         labels=labels,
         train_op_fn=_no_op_train_fn)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -1383,7 +1413,7 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
 
     # Assert predictions, loss, and metrics.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
       update_ops = {k: spec.eval_metric_ops[k][1] for k in spec.eval_metric_ops}
@@ -1476,7 +1506,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         features={'x': np.array(((42.,),))},
         mode=model_fn.ModeKeys.PREDICT,
         logits=logits_placeholder)
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(errors.OpError, 'logits shape'):
         spec.predictions[prediction_keys.PredictionKeys.PROBABILITIES].eval({
             logits_placeholder: logits_2x2
@@ -1506,7 +1536,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_placeholder,
         labels=labels_placeholder)[0]
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           r'\[expected_labels_shape: \] \[2 1\] \[labels_shape: \] \[2 2\]'):
@@ -1547,7 +1577,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_placeholder,
         labels=labels_placeholder)[0]
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           r'\[expected_labels_shape: \] \[3 1\] \[labels_shape: \] \[2 1\]'):
@@ -1555,7 +1585,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
             labels_placeholder: values_2x1,
             logits_placeholder: values_3x1
         })
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           r'\[expected_labels_shape: \] \[2 1\] \[labels_shape: \] \[3 1\]'):
@@ -1594,7 +1624,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Assert predictions.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       predictions = sess.run(spec.predictions)
@@ -1630,7 +1660,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.PREDICT,
         logits=logits)
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertAllEqual(
           expected_classes,
@@ -1650,7 +1680,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=1e-2, atol=1e-2)
@@ -1703,7 +1733,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -1778,7 +1808,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     }
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -1802,7 +1832,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(41., training_loss.eval())
 
@@ -1819,7 +1849,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         logits=logits,
         labels=labels)
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -1847,7 +1877,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=1e-2, atol=1e-2)
@@ -1894,7 +1924,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     }
     self.assertItemsEqual(expected_metrics.keys(), spec.eval_metric_ops.keys())
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -1927,7 +1957,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(expected_training_loss, training_loss.eval())
       self.assertAllClose(expected_unreduced_loss, unreduced_loss.eval())
@@ -1953,7 +1983,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(expected_training_loss, training_loss.eval())
       self.assertAllClose(expected_unreduced_loss, unreduced_loss.eval())
@@ -1981,7 +2011,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_input,
         labels=labels_input)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(np.sum(loss), actual_training_loss.eval())
 
@@ -2001,7 +2031,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -2056,7 +2086,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((spec.loss, spec.train_op,
@@ -2096,11 +2126,39 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         labels=labels,
         optimizer=_Optimizer())
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAllClose(expected_loss, loss)
       self.assertEqual(expected_train_result, train_result)
+
+  def test_train_with_update_ops(self):
+    head = head_lib._binary_logistic_head_with_sigmoid_cross_entropy_loss()
+
+    with ops.Graph().as_default():
+      w = variables.Variable(1)
+      update_op = w.assign_add(1)
+      ops.add_to_collection(ops.GraphKeys.UPDATE_OPS, update_op)
+
+      t = variables.Variable('')
+      expected_train_result = b'my_train_op'
+      def _train_op_fn(loss):
+        del loss
+        return t.assign(expected_train_result)
+
+      spec = head.create_estimator_spec(
+          features={'x': np.array(((42,),), dtype=np.int32)},
+          mode=model_fn.ModeKeys.TRAIN,
+          logits=np.array(((45,), (-41,),), dtype=np.float32),
+          labels=np.array(((1,), (1,),), dtype=np.float64),
+          train_op_fn=_train_op_fn)
+
+      with self.cached_session() as sess:
+        _initialize_variables(self, spec.scaffold)
+        sess.run(spec.train_op)
+        w_value, t_value = sess.run([w, t])
+        self.assertEqual(2, w_value)
+        self.assertEqual(expected_train_result, t_value)
 
   def test_train_summaries_with_head_name(self):
     head = head_lib._binary_logistic_head_with_sigmoid_cross_entropy_loss(
@@ -2124,7 +2182,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         labels=labels,
         train_op_fn=_train_op_fn)
     # Assert summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       summary_str = sess.run(spec.scaffold.summary_op)
@@ -2169,7 +2227,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         regularization_losses=regularization_losses)
 
     # Assert predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((spec.loss, spec.train_op,
@@ -2196,7 +2254,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     with self.assertRaisesRegexp(
         errors.InvalidArgumentError,
         r'Labels must <= n_classes - 1'):
-      with self.test_session():
+      with self.cached_session():
         _initialize_variables(self, monitored_session.Scaffold())
         training_loss.eval()
 
@@ -2219,7 +2277,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=1e-2, atol=1e-2)
@@ -2251,7 +2309,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         train_op_fn=_train_op_fn)
 
     # Assert predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAlmostEqual(expected_loss, loss, delta=1.e-5)
@@ -2276,7 +2334,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(), rtol=1e-2, atol=1e-2)
@@ -2302,7 +2360,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     expected_loss = 1.2484322
 
     # Assert loss.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       update_ops = {k: spec.eval_metric_ops[k][1] for k in spec.eval_metric_ops}
@@ -2327,7 +2385,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         logits=logits)
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       predictions = sess.run(spec.predictions)
       self.assertAllClose(
@@ -2389,7 +2447,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     self.assertItemsEqual(expected_metrics.keys(), spec.eval_metric_ops.keys())
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
       update_ops = {k: spec.eval_metric_ops[k][1] for k in spec.eval_metric_ops}
@@ -2425,7 +2483,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels_rank_1)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(),
@@ -2473,7 +2531,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     self.assertIsNotNone(spec.train_op)
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((
@@ -2519,7 +2577,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     self.assertIsNotNone(spec.train_op)
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       loss, train_result, summary_str = sess.run((
@@ -2554,7 +2612,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         logits=logits,
         labels=labels)
     tol = 1e-2
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(
           expected_training_loss, training_loss.eval(),
@@ -2591,7 +2649,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
 
     # Assert predictions, loss, train_op, and summaries.
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAllClose(expected_loss, loss, rtol=tol, atol=tol)
@@ -2617,7 +2675,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         logits=logits,
         labels=labels,
         train_op_fn=_no_op_train_fn)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -2642,7 +2700,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
         logits=logits,
         labels=labels,
         train_op_fn=_no_op_train_fn)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -2686,7 +2744,7 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
     }
 
     tol = 1e-2
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
       update_ops = {k: spec.eval_metric_ops[k][1] for k in spec.eval_metric_ops}
@@ -2767,7 +2825,7 @@ class RegressionHead(test.TestCase):
         features={'x': np.array(((42.,),))},
         mode=model_fn.ModeKeys.PREDICT,
         logits=logits_placeholder)
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(errors.OpError, 'logits shape'):
         spec.predictions[prediction_keys.PredictionKeys.PREDICTIONS].eval({
             logits_placeholder: logits_1d
@@ -2799,7 +2857,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_placeholder,
         labels=labels_placeholder)
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(errors.OpError, 'logits shape'):
         spec.loss.eval({
             labels_placeholder: values_3d,
@@ -2810,7 +2868,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_placeholder,
         labels=labels_placeholder)[0]
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           r'\[expected_labels_shape: \] \[2 3\] \[labels_shape: \] \[2 1\]'):
@@ -2850,7 +2908,7 @@ class RegressionHead(test.TestCase):
         logits=logits_placeholder,
         labels=labels_placeholder,
         train_op_fn=lambda x: x)
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(errors.OpError, 'logits shape'):
         spec.loss.eval({
             labels_placeholder: values_3d,
@@ -2861,7 +2919,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits_placeholder,
         labels=labels_placeholder)[0]
-    with self.test_session():
+    with self.cached_session():
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           r'\[expected_labels_shape: \] \[2 3\] \[labels_shape: \] \[2 1\]'):
@@ -2899,7 +2957,7 @@ class RegressionHead(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Assert predictions.
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, spec.scaffold)
       self.assertAllClose(logits, spec.predictions[prediction_key].eval())
       self.assertAllClose(
@@ -2934,7 +2992,7 @@ class RegressionHead(test.TestCase):
         spec.export_outputs.keys())
 
     # Assert predictions.
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, spec.scaffold)
       self.assertAllClose(
           expected_predictions, spec.predictions[keys.PREDICTIONS].eval())
@@ -2961,7 +3019,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       # loss = [(43-45)^2, (44-41)] = [4, 9]
       self.assertAllClose(13., training_loss.eval())
@@ -2987,7 +3045,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits_input,
         labels=labels_input)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(np.sum(loss), actual_training_loss.eval())
 
@@ -3006,7 +3064,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -3045,14 +3103,16 @@ class RegressionHead(test.TestCase):
     self.assertItemsEqual((prediction_key,), spec.predictions.keys())
     self.assertEqual(dtypes.float32, spec.predictions[prediction_key].dtype)
     self.assertEqual(dtypes.float32, spec.loss.dtype)
-    self.assertItemsEqual(
-        (metric_keys.MetricKeys.LOSS_MEAN,), spec.eval_metric_ops.keys())
+    self.assertItemsEqual((metric_keys.MetricKeys.LOSS_MEAN,
+                           metric_keys.MetricKeys.PREDICTION_MEAN,
+                           metric_keys.MetricKeys.LABEL_MEAN),
+                          spec.eval_metric_ops.keys())
     self.assertIsNone(spec.train_op)
     self.assertIsNone(spec.export_outputs)
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       loss_mean_value_op, loss_mean_update_op = spec.eval_metric_ops[
@@ -3082,6 +3142,9 @@ class RegressionHead(test.TestCase):
 
     expected_metric_keys = [
         '{}/some_regression_head'.format(metric_keys.MetricKeys.LOSS_MEAN),
+        '{}/some_regression_head'.format(
+            metric_keys.MetricKeys.PREDICTION_MEAN),
+        '{}/some_regression_head'.format(metric_keys.MetricKeys.LABEL_MEAN),
     ]
     self.assertItemsEqual(expected_metric_keys, spec.eval_metric_ops.keys())
 
@@ -3112,10 +3175,12 @@ class RegressionHead(test.TestCase):
     expected_metrics = {
         keys.LOSS_MEAN: expected_unregularized_loss,
         keys.LOSS_REGULARIZATION: expected_regularization_loss,
+        keys.PREDICTION_MEAN: (45 + 41) / 2.0,
+        keys.LABEL_MEAN: (43 + 44) / 2.0,
     }
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       value_ops = {k: spec.eval_metric_ops[k][0] for k in spec.eval_metric_ops}
@@ -3147,7 +3212,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(expected_training_loss, training_loss.eval())
       self.assertAllClose(expected_unreduced_loss, unreduced_loss.eval())
@@ -3172,7 +3237,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(expected_training_loss, training_loss.eval())
       self.assertAllClose(expected_unreduced_loss, unreduced_loss.eval())
@@ -3229,7 +3294,7 @@ class RegressionHead(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       predictions, loss, train_result, summary_str = sess.run((
@@ -3272,11 +3337,39 @@ class RegressionHead(test.TestCase):
         labels=labels,
         optimizer=_Optimizer())
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAllClose(expected_loss, loss)
       self.assertEqual(expected_train_result, train_result)
+
+  def test_train_with_update_ops(self):
+    head = head_lib._regression_head()
+
+    with ops.Graph().as_default():
+      w = variables.Variable(1)
+      update_op = w.assign_add(1)
+      ops.add_to_collection(ops.GraphKeys.UPDATE_OPS, update_op)
+
+      t = variables.Variable('')
+      expected_train_result = b'my_train_op'
+      def _train_op_fn(loss):
+        del loss
+        return t.assign(expected_train_result)
+
+      spec = head.create_estimator_spec(
+          features={'x': np.array(((42,),), dtype=np.int32)},
+          mode=model_fn.ModeKeys.TRAIN,
+          logits=np.array(((45,), (41,),), dtype=np.float32),
+          labels=np.array(((43.,), (44.,),), dtype=np.float64),
+          train_op_fn=_train_op_fn)
+
+      with self.cached_session() as sess:
+        _initialize_variables(self, spec.scaffold)
+        sess.run(spec.train_op)
+        w_value, t_value = sess.run([w, t])
+        self.assertEqual(2, w_value)
+        self.assertEqual(expected_train_result, t_value)
 
   def test_train_summaries_with_head_name(self):
     head = head_lib._regression_head(name='some_regression_head')
@@ -3301,7 +3394,7 @@ class RegressionHead(test.TestCase):
         train_op_fn=_train_op_fn)
 
     # Assert summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       summary_str = sess.run(spec.scaffold.summary_op)
@@ -3348,7 +3441,7 @@ class RegressionHead(test.TestCase):
         regularization_losses=regularization_losses)
 
     # Assert predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       prediction_key = prediction_keys.PredictionKeys.PREDICTIONS
@@ -3385,14 +3478,16 @@ class RegressionHead(test.TestCase):
     self.assertItemsEqual((prediction_key,), spec.predictions.keys())
     self.assertEqual(dtypes.float32, spec.predictions[prediction_key].dtype)
     self.assertEqual(dtypes.float32, spec.loss.dtype)
-    self.assertItemsEqual(
-        (metric_keys.MetricKeys.LOSS_MEAN,), spec.eval_metric_ops.keys())
+    self.assertItemsEqual((metric_keys.MetricKeys.LOSS_MEAN,
+                           metric_keys.MetricKeys.PREDICTION_MEAN,
+                           metric_keys.MetricKeys.LABEL_MEAN),
+                          spec.eval_metric_ops.keys())
     self.assertIsNone(spec.train_op)
     self.assertIsNone(spec.export_outputs)
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       loss_mean_value_op, loss_mean_update_op = spec.eval_metric_ops[
@@ -3428,7 +3523,7 @@ class RegressionHead(test.TestCase):
         labels=np.array(((35,), (42,), (45,)), dtype=np.int32))
 
     # Assert loss.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       loss = sess.run(spec.loss)
       # loss = 1*(35-45)^2 + .1*(42-41)^2 + 1.5*(45-44)^2 = 100+.1+1.5 = 101.6
@@ -3470,7 +3565,7 @@ class RegressionHead(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       predictions, loss, train_result, summary_str = sess.run((
@@ -3505,7 +3600,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels_rank_1)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(expected_training_loss, training_loss.eval())
       self.assertAllClose(expected_unreduced_loss, unreduced_loss.eval())
@@ -3553,7 +3648,7 @@ class RegressionHead(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       predictions, loss, train_result, summary_str = sess.run((
@@ -3584,7 +3679,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.EVAL,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       # loss = [(35-45)^2, (42-41)^2, (45-44)^2] = [100, 1, 1].
       # weighted sum loss = 1 * 100 + .1 * 1 + 1.5 * 1 = 101.6
@@ -3614,14 +3709,16 @@ class RegressionHead(test.TestCase):
     self.assertItemsEqual((prediction_key,), spec.predictions.keys())
     self.assertEqual(dtypes.float32, spec.predictions[prediction_key].dtype)
     self.assertEqual(dtypes.float32, spec.loss.dtype)
-    self.assertItemsEqual(
-        (metric_keys.MetricKeys.LOSS_MEAN,), spec.eval_metric_ops.keys())
+    self.assertItemsEqual((metric_keys.MetricKeys.LOSS_MEAN,
+                           metric_keys.MetricKeys.PREDICTION_MEAN,
+                           metric_keys.MetricKeys.LABEL_MEAN),
+                          spec.eval_metric_ops.keys())
     self.assertIsNone(spec.train_op)
     self.assertIsNone(spec.export_outputs)
     _assert_no_hooks(self, spec)
 
     # Assert predictions, loss, and metrics.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNone(spec.scaffold.summary_op)
       loss_mean_value_op, loss_mean_update_op = spec.eval_metric_ops[
@@ -3653,7 +3750,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)[0]
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       # loss = [(35-45)^2, (42-41)^2, (45-44)^2] = [100, 1, 1].
       # weighted sum loss = 1 * 100 + .1 * 1 + 1.5 * 1 = 101.6
@@ -3699,7 +3796,7 @@ class RegressionHead(test.TestCase):
     _assert_no_hooks(self, spec)
 
     # Evaluate predictions, loss, train_op, and summaries.
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
       predictions, loss, train_result, summary_str = sess.run((
@@ -3746,7 +3843,13 @@ class RegressionHead(test.TestCase):
     # losses = [1*(35-45)^2, .1*(42-41)^2, 1.5*(45-44)^2] = [100, .1, 1.5]
     # loss = sum(losses) = 100+.1+1.5 = 101.6
     # loss_mean = loss/(1+.1+1.5) = 101.6/2.6 = 39.076923
-    expected_metrics = {metric_keys.MetricKeys.LOSS_MEAN: 39.076923}
+    expected_metrics = {
+        metric_keys.MetricKeys.LOSS_MEAN:
+            39.076923,
+        metric_keys.MetricKeys.PREDICTION_MEAN:
+            (45 + 41 * 0.1 + 44 * 1.5) / 2.6,
+        metric_keys.MetricKeys.LABEL_MEAN: (35 + 42 * 0.1 + 45 * 1.5) / 2.6,
+    }
 
     # Assert spec contains expected tensors.
     self.assertEqual(dtypes.float32, spec.loss.dtype)
@@ -3754,7 +3857,7 @@ class RegressionHead(test.TestCase):
     self.assertIsNone(spec.train_op)
     _assert_no_hooks(self, spec)
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       # Finalize graph and initialize variables.
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
@@ -3812,7 +3915,7 @@ class RegressionHead(test.TestCase):
     self.assertEqual(dtypes.float32, spec.loss.dtype)
     self.assertIsNotNone(spec.train_op)
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       # Finalize graph and initialize variables.
       _initialize_variables(self, spec.scaffold)
       self.assertIsNotNone(spec.scaffold.summary_op)
@@ -3852,7 +3955,7 @@ class RegressionHead(test.TestCase):
         mode=model_fn.ModeKeys.TRAIN,
         logits=logits,
         labels=labels)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(expected_training_loss, training_loss.eval())
       self.assertAllClose(expected_unreduced_loss, unreduced_loss.eval())
@@ -3885,7 +3988,7 @@ class RegressionHead(test.TestCase):
         logits=logits,
         labels=labels,
         train_op_fn=_train_op_fn)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       self.assertAllClose(expected_loss, spec.loss.eval())
 
@@ -3910,7 +4013,7 @@ class RegressionHead(test.TestCase):
         logits=logits,
         labels=labels,
         train_op_fn=_no_op_train_fn)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
@@ -3939,7 +4042,7 @@ class RegressionHead(test.TestCase):
         logits=logits,
         labels=labels,
         train_op_fn=_no_op_train_fn)
-    with self.test_session():
+    with self.cached_session():
       _initialize_variables(self, monitored_session.Scaffold())
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,

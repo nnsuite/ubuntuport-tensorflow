@@ -4,6 +4,7 @@ licenses(["notice"])  # Apache 2.0
 
 load("//tensorflow:tensorflow.bzl", "tf_py_wrap_cc")
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
+load("//tensorflow:tensorflow.bzl", "py_binary")
 
 cc_library(
     name = "toco_python_api",
@@ -12,6 +13,7 @@ cc_library(
     deps = [
         "//tensorflow/contrib/lite/toco:model_flags_proto_cc",
         "//tensorflow/contrib/lite/toco:toco_flags_proto_cc",
+        "//tensorflow/contrib/lite/toco:toco_graphviz_dump_options",
         "//tensorflow/contrib/lite/toco:toco_port",
         "//tensorflow/contrib/lite/toco:toco_tooling",
         "//tensorflow/core:lib",
@@ -52,5 +54,8 @@ tf_py_test(
     data = [
         ":toco_from_protos",
     ],
-    tags = ["no_pip"],
+    tags = [
+        "no_oss",
+        "no_pip",
+    ],
 )

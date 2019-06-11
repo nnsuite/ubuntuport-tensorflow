@@ -135,6 +135,39 @@ bool IsDequeueOp(const NodeDef& node) {
 
 bool IsDiv(const NodeDef& node) { return node.op() == "Div"; }
 
+// Returns true if node represents a unary elementwise function that is
+// monotonic. If *is_non_decreasing is true, the function is non-decreasing,
+// e.g. sqrt, exp. *is_non_decreasing is false, the function is non-increasing,
+// e.g. inv.
+bool IsElementWiseMonotonic(const NodeDef& node, bool* is_non_decreasing) {
+  static const std::unordered_set<string>* monotonic_non_decreasing_ops =
+      CHECK_NOTNULL((new std::unordered_set<string>{
+          "Asinh", "Atanh",   "Ceil",  "Elu",  "Erf",  "Exp",   "Expm1",
+          "Floor", "Log",     "Log1p", "Relu", "Relu", "Relu6", "Rint",
+          "Selu",  "Sigmoid", "Sign",  "Sinh", "Sqrt", "Tanh",
+      }));
+  static const std::unordered_set<string>* monotonic_non_increasing_ops =
+      CHECK_NOTNULL((new std::unordered_set<string>{
+          "Inv",
+          "Reciprocal",
+          "Erfc",
+          "Rsqrt",
+          "Neg",
+      }));
+  if (monotonic_non_decreasing_ops->count(node.op()) > 0) {
+    if (is_non_decreasing) {
+      *is_non_decreasing = true;
+    }
+    return true;
+  } else if (monotonic_non_increasing_ops->count(node.op()) > 0) {
+    if (is_non_decreasing) {
+      *is_non_decreasing = false;
+    }
+    return true;
+  }
+  return false;
+}
+
 bool IsEluGrad(const NodeDef& node) { return node.op() == "EluGrad"; }
 
 bool IsEnter(const NodeDef& node) {
@@ -148,6 +181,8 @@ bool IsExit(const NodeDef& node) {
   const auto& op = node.op();
   return op == "Exit" || op == "RefExit";
 }
+
+bool IsExp(const NodeDef& node) { return node.op() == "Exp"; }
 
 bool IsFill(const NodeDef& node) { return node.op() == "Fill"; }
 
@@ -192,6 +227,8 @@ bool IsInvGrad(const NodeDef& node) { return node.op() == "InvGrad"; }
 bool IsLess(const NodeDef& node) { return node.op() == "Less"; }
 
 bool IsLessEqual(const NodeDef& node) { return node.op() == "LessEqual"; }
+
+bool IsLog(const NodeDef& node) { return node.op() == "Log"; }
 
 bool IsLogicalAnd(const NodeDef& node) { return node.op() == "LogicalAnd"; }
 
@@ -388,6 +425,10 @@ bool IsSwitch(const NodeDef& node) {
   return op == "Switch" || op == "RefSwitch";
 }
 
+bool IsSymbolicGradient(const NodeDef& node) {
+  return node.op() == "SymbolicGradient";
+}
+
 bool IsTanhGrad(const NodeDef& node) { return node.op() == "TanhGrad"; }
 
 bool IsTile(const NodeDef& node) { return node.op() == "Tile"; }
@@ -454,7 +495,7 @@ bool IsFreeOfSideEffect(const NodeDef& node) {
     }
   }
   // Queue ops modify the queue which is a side effect.
-  if (node.op().find("Queue") != std::string::npos) {
+  if (node.op().find("Queue") != string::npos) {
     return false;
   }
   return !ModifiesInputsInPlace(node);
@@ -615,7 +656,8 @@ bool HasOpDef(const NodeDef& node) {
 }
 
 bool IsIdempotent(const NodeDef& node) {
-  return IsValueAndOrderAndShapePreserving(node) && IsFreeOfSideEffect(node);
+  return IsValueAndOrderAndShapePreserving(node) && IsFreeOfSideEffect(node) &&
+         !ModifiesFrameInfo(node);
 }
 
 }  // namespace grappler

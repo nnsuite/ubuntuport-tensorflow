@@ -29,7 +29,7 @@ from tensorflow.python.training.rmsprop import RMSPropOptimizer
 
 class GRULayerTest(test.TestCase):
 
-  @tf_test_util.run_in_graph_and_eager_modes()
+  @tf_test_util.run_in_graph_and_eager_modes
   def test_return_sequences_GRU(self):
     num_samples = 2
     timesteps = 3
@@ -41,7 +41,7 @@ class GRULayerTest(test.TestCase):
                 'return_sequences': True},
         input_shape=(num_samples, timesteps, embedding_dim))
 
-  @tf_test_util.run_in_graph_and_eager_modes()
+  @tf_test_util.run_in_graph_and_eager_modes
   def test_dynamic_behavior_GRU(self):
     num_samples = 2
     timesteps = 3
@@ -55,7 +55,7 @@ class GRULayerTest(test.TestCase):
     y = np.random.random((num_samples, units))
     model.train_on_batch(x, y)
 
-  @tf_test_util.run_in_graph_and_eager_modes()
+  @tf_test_util.run_in_graph_and_eager_modes
   def test_dropout_GRU(self):
     num_samples = 2
     timesteps = 3
@@ -68,7 +68,7 @@ class GRULayerTest(test.TestCase):
                 'recurrent_dropout': 0.1},
         input_shape=(num_samples, timesteps, embedding_dim))
 
-  @tf_test_util.run_in_graph_and_eager_modes()
+  @tf_test_util.run_in_graph_and_eager_modes
   def test_implementation_mode_GRU(self):
     num_samples = 2
     timesteps = 3
@@ -87,7 +87,7 @@ class GRULayerTest(test.TestCase):
     embedding_dim = 4
     units = 2
     layer_class = keras.layers.GRU
-    with self.test_session():
+    with self.cached_session():
       model = keras.models.Sequential()
       model.add(
           keras.layers.Embedding(
@@ -146,7 +146,7 @@ class GRULayerTest(test.TestCase):
   def test_regularizers_GRU(self):
     embedding_dim = 4
     layer_class = keras.layers.GRU
-    with self.test_session():
+    with self.cached_session():
       layer = layer_class(
           5,
           return_sequences=False,
@@ -166,7 +166,7 @@ class GRULayerTest(test.TestCase):
   def test_constraints_GRU(self):
     embedding_dim = 4
     layer_class = keras.layers.GRU
-    with self.test_session():
+    with self.cached_session():
       k_constraint = keras.constraints.max_norm(0.01)
       r_constraint = keras.constraints.max_norm(0.01)
       b_constraint = keras.constraints.max_norm(0.01)
@@ -183,16 +183,18 @@ class GRULayerTest(test.TestCase):
       self.assertEqual(layer.cell.recurrent_kernel.constraint, r_constraint)
       self.assertEqual(layer.cell.bias.constraint, b_constraint)
 
+  @tf_test_util.run_in_graph_and_eager_modes
   def test_with_masking_layer_GRU(self):
     layer_class = keras.layers.GRU
-    with self.test_session():
+    with self.cached_session():
       inputs = np.random.random((2, 3, 4))
       targets = np.abs(np.random.random((2, 3, 5)))
       targets /= targets.sum(axis=-1, keepdims=True)
       model = keras.models.Sequential()
       model.add(keras.layers.Masking(input_shape=(3, 4)))
       model.add(layer_class(units=5, return_sequences=True, unroll=False))
-      model.compile(loss='categorical_crossentropy', optimizer='adam')
+      model.compile(loss='categorical_crossentropy',
+                    optimizer=RMSPropOptimizer(0.01))
       model.fit(inputs, targets, epochs=1, batch_size=2, verbose=1)
 
   def test_from_config_GRU(self):

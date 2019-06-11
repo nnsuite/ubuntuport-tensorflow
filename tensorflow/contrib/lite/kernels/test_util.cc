@@ -32,8 +32,8 @@ std::vector<Matcher<float>> ArrayFloatNear(const std::vector<float>& values,
   return matchers;
 }
 
-int SingleOpModel::AddInput(const TensorData& t) {
-  int id = AddTensor<float>(t, {});
+int SingleOpModel::AddInput(const TensorData& t, bool is_variable) {
+  int id = AddTensor<float>(t, {}, is_variable);
   inputs_.push_back(id);
   return id;
 }
@@ -74,8 +74,8 @@ void SingleOpModel::SetCustomOp(
       CustomOptionsFormat_FLEXBUFFERS));
 }
 
-void SingleOpModel::BuildInterpreter(
-    std::vector<std::vector<int>> input_shapes) {
+void SingleOpModel::BuildInterpreter(std::vector<std::vector<int>> input_shapes,
+                                     bool allow_fp32_relax_to_fp16) {
   auto opcodes = builder_.CreateVector(opcodes_);
   auto operators = builder_.CreateVector(operators_);
   auto tensors = builder_.CreateVector(tensors_);
@@ -112,8 +112,17 @@ void SingleOpModel::BuildInterpreter(
     if (shape.empty()) continue;
     CHECK(interpreter_->ResizeInputTensor(input_idx, shape) == kTfLiteOk);
   }
+
+  interpreter_->SetAllowFp16PrecisionForFp32(allow_fp32_relax_to_fp16);
+
+  // Modify delegate with function.
+  if (apply_delegate_fn_) {
+    apply_delegate_fn_(interpreter_.get());
+  }
+
   CHECK(interpreter_->AllocateTensors() == kTfLiteOk)
       << "Cannot allocate tensors";
+  interpreter_->ResetVariableTensors();
 }
 
 void SingleOpModel::Invoke() { CHECK(interpreter_->Invoke() == kTfLiteOk); }

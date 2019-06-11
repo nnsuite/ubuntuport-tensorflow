@@ -108,13 +108,17 @@ def parse_input_fn_result(result):
   else:
     input_hooks.append(_DatasetInitializerHook(iterator))
     result = iterator.get_next()
+  return parse_iterator_result(result) + (input_hooks,)
 
+
+def parse_iterator_result(result):
+  """Gets features, labels from result."""
   if isinstance(result, (list, tuple)):
     if len(result) != 2:
       raise ValueError(
           'input_fn should return (features, labels) as a len 2 tuple.')
-    return result[0], result[1], input_hooks
-  return result, None, input_hooks
+    return result[0], result[1]
+  return result, None
 
 
 class _DatasetInitializerHook(training.SessionRunHook):
@@ -129,3 +133,35 @@ class _DatasetInitializerHook(training.SessionRunHook):
   def after_create_session(self, session, coord):
     del coord
     session.run(self._initializer)
+
+
+class MultiHostDatasetInitializerHook(training.SessionRunHook):
+  """Creates a SessionRunHook that initializes all passed iterators."""
+
+  def __init__(self, dataset_initializers):
+    self._initializers = dataset_initializers
+
+  def after_create_session(self, session, coord):
+    del coord
+    start = time.time()
+    session.run(self._initializers)
+    logging.info('Initialized dataset iterators in %d seconds',
+                 time.time() - start)
+
+
+class StrategyInitFinalizeHook(training.SessionRunHook):
+  """Creates a SessionRunHook that initializes and shutsdown devices."""
+
+  def __init__(self, initialization_fn, finalize_fn):
+    self._initialization_fn = initialization_fn
+    self._finalize_fn = finalize_fn
+
+  def begin(self):
+    # We only create the init ops, but don't run it. We rely on SessionManager
+    # to run it for us.
+    self._init_ops = self._initialization_fn()
+    self._finalize_ops = self._finalize_fn()
+
+  def end(self, session):
+    logging.info('Finalize system.')
+    session.run(self._finalize_ops)

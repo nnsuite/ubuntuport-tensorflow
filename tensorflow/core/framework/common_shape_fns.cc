@@ -432,9 +432,9 @@ Status Conv2DShape(shape_inference::InferenceContext* c) {
   DimensionHandle batch_size_dim;
   DimensionHandle input_depth_dim;
   gtl::InlinedVector<DimensionHandle, 2> input_spatial_dims(2);
-  TF_RETURN_IF_ERROR(DimensionsFromShape(conv_input_shape, data_format,
-                                         &batch_size_dim, &input_spatial_dims,
-                                         &input_depth_dim, c));
+  TF_RETURN_IF_ERROR(DimensionsFromShape(
+      conv_input_shape, data_format, &batch_size_dim,
+      absl::MakeSpan(input_spatial_dims), &input_depth_dim, c));
 
   DimensionHandle output_depth_dim = c->Dim(
       filter_shape, GetFilterDimIndex<num_spatial_dims>(filter_format, 'O'));
@@ -721,10 +721,15 @@ Status FusedBatchNormShape(shape_inference::InferenceContext* c) {
   bool is_training;
   TF_RETURN_IF_ERROR(c->GetAttr("is_training", &is_training));
   int number_inputs = (is_training) ? 3 : 5;
-  string data_format;
-  TF_RETURN_IF_ERROR(c->GetAttr("data_format", &data_format));
-  DimensionHandle channel_dim =
-      (data_format == "NHWC") ? c->Dim(x, 3) : c->Dim(x, 1);
+  string data_format_str;
+  TF_RETURN_IF_ERROR(c->GetAttr("data_format", &data_format_str));
+  TensorFormat data_format;
+  if (!FormatFromString(data_format_str, &data_format)) {
+    return errors::InvalidArgument("Invalid data format string: ",
+                                   data_format_str);
+  }
+  int channel_dim_index = GetTensorFeatureDimIndex(4, data_format);
+  DimensionHandle channel_dim = c->Dim(x, channel_dim_index);
 
   // covers scale, offset, and if is_training is false, mean, variance
   for (int i = 1; i < number_inputs; ++i) {
@@ -734,11 +739,7 @@ Status FusedBatchNormShape(shape_inference::InferenceContext* c) {
   }
 
   ShapeHandle y;
-  if (data_format == "NHWC") {
-    TF_RETURN_IF_ERROR(c->ReplaceDim(x, 3, channel_dim, &y));
-  } else {
-    TF_RETURN_IF_ERROR(c->ReplaceDim(x, 1, channel_dim, &y));
-  }
+  TF_RETURN_IF_ERROR(c->ReplaceDim(x, channel_dim_index, channel_dim, &y));
   c->set_output(0, y);
   ShapeHandle vector_shape = c->Vector(channel_dim);
   c->set_output(1, vector_shape);
@@ -755,16 +756,18 @@ Status FusedBatchNormGradShape(shape_inference::InferenceContext* c) {
   TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 4, &x));
 
   bool is_training;
-  string data_format;
   TF_RETURN_IF_ERROR(c->GetAttr("is_training", &is_training));
-  TF_RETURN_IF_ERROR(c->GetAttr("data_format", &data_format));
-  DimensionHandle channel_dim =
-      (data_format == "NHWC") ? c->Dim(y_backprop, 3) : c->Dim(y_backprop, 1);
-  if (data_format == "NHWC") {
-    TF_RETURN_IF_ERROR(c->Merge(channel_dim, c->Dim(x, 3), &channel_dim));
-  } else {
-    TF_RETURN_IF_ERROR(c->Merge(channel_dim, c->Dim(x, 1), &channel_dim));
+  string data_format_str;
+  TF_RETURN_IF_ERROR(c->GetAttr("data_format", &data_format_str));
+  TensorFormat data_format;
+  if (!FormatFromString(data_format_str, &data_format)) {
+    return errors::InvalidArgument("Invalid data format string: ",
+                                   data_format_str);
   }
+  int channel_dim_index = GetTensorFeatureDimIndex(4, data_format);
+  DimensionHandle channel_dim = c->Dim(y_backprop, channel_dim_index);
+  TF_RETURN_IF_ERROR(
+      c->Merge(channel_dim, c->Dim(x, channel_dim_index), &channel_dim));
 
   // covers scale, mean (reserve_space_1), variance (reserve_space_2)
   for (int i = 2; i < 5; ++i) {
@@ -774,11 +777,8 @@ Status FusedBatchNormGradShape(shape_inference::InferenceContext* c) {
   }
 
   ShapeHandle x_backprop;
-  if (data_format == "NHWC") {
-    TF_RETURN_IF_ERROR(c->ReplaceDim(y_backprop, 3, channel_dim, &x_backprop));
-  } else {
-    TF_RETURN_IF_ERROR(c->ReplaceDim(y_backprop, 1, channel_dim, &x_backprop));
-  }
+  TF_RETURN_IF_ERROR(
+      c->ReplaceDim(y_backprop, channel_dim_index, channel_dim, &x_backprop));
   c->set_output(0, x_backprop);
   c->set_output(1, c->Vector(channel_dim));
   c->set_output(2, c->Vector(channel_dim));
@@ -1231,11 +1231,13 @@ Status ConcatV2Shape(InferenceContext* c) {
                            c->num_inputs() - 1 /* dim_index */);
 }
 
-Status BroadcastBinaryOpOutputShapeFn(InferenceContext* c, int output_index) {
-  ShapeHandle shape_x = c->input(0);
-  ShapeHandle shape_y = c->input(1);
+Status BroadcastBinaryOpOutputShapeFnHelper(InferenceContext* c,
+                                            ShapeHandle shape_x,
+                                            ShapeHandle shape_y,
+                                            ShapeHandle* out) {
+  CHECK_NOTNULL(out);
   if (!c->RankKnown(shape_x) || !c->RankKnown(shape_y)) {
-    c->set_output(0, c->UnknownShape());
+    *out = c->UnknownShape();
     return Status::OK();
   }
   const int32 rank_x = c->Rank(shape_x);
@@ -1293,7 +1295,7 @@ Status BroadcastBinaryOpOutputShapeFn(InferenceContext* c, int output_index) {
     }
   }
 
-  c->set_output(output_index, c->MakeShape(dims));
+  *out = c->MakeShape(dims);
   return Status::OK();
 }
 
@@ -1301,6 +1303,113 @@ Status RandomShape(shape_inference::InferenceContext* c) {
   shape_inference::ShapeHandle out;
   TF_RETURN_IF_ERROR(c->MakeShapeFromShapeTensor(0, &out));
   c->set_output(0, out);
+  return Status::OK();
+}
+
+namespace {
+
+// This SliceHelper processes the output shape of the `slice`
+// when the tensor of `sizes` is available.
+template <typename T>
+Status SliceHelper(InferenceContext* c, ShapeHandle begin_value,
+                   const Tensor* sizes_value,
+                   std::vector<DimensionHandle>* dims) {
+  auto sizes_vec = sizes_value->vec<T>();
+  for (int i = 0; i < sizes_value->NumElements(); ++i) {
+    DimensionHandle dim = c->Dim(c->input(0), i);
+    if (sizes_vec(i) != -1) {
+      auto dim_val = c->Value(dim);
+      if (sizes_vec(i) < 0) {
+        return errors::InvalidArgument(
+            "Out of bounds slicing on dimension ", i, " of length ", dim_val,
+            ": sizes vector cannot be < -1, but was ", sizes_vec(i));
+      }
+
+      dims->emplace_back(c->MakeDim(sizes_vec(i)));
+    } else {
+      DimensionHandle result;
+      TF_RETURN_IF_ERROR(c->Subtract(dim, c->Dim(begin_value, i), &result));
+      dims->emplace_back(result);
+    }
+  }
+
+  return Status::OK();
+}
+}  // namespace
+
+Status SliceShape(InferenceContext* c) {
+  ShapeHandle input = c->input(0);
+  ShapeHandle begin_shape;
+  TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 1, &begin_shape));
+  ShapeHandle sizes_shape;
+  TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &sizes_shape));
+
+  // Merge to check compatibility of begin and sizes tensors.
+  TF_RETURN_IF_ERROR(c->Merge(begin_shape, sizes_shape, &begin_shape));
+
+  DimensionHandle ndims = c->Dim(begin_shape, 0);
+  if (c->ValueKnown(ndims)) {
+    TF_RETURN_IF_ERROR(c->WithRank(input, c->Value(ndims), &input));
+  }
+
+  // NOTE(mrry): Use MakeShapeFromShapeTensor to handle partially-known
+  // values, even though the `begin` value does not represent a shape.
+  ShapeHandle begin_value;
+  TF_RETURN_IF_ERROR(c->MakeShapeFromShapeTensor(1, &begin_value));
+
+  // We check the tensor value here and will only use
+  // `MakeShapeFromShapeTensor` when `sizes_value` is null.
+  // The reason is that `sizes` might contain -1, which can't
+  // be represented (-1 in the ShapeHandle would mean "unknown").
+  const Tensor* sizes_value = c->input_tensor(2);
+
+  if (sizes_value != nullptr) {
+    TF_RETURN_IF_ERROR(
+        c->WithRank(begin_value, sizes_value->NumElements(), &begin_value));
+    std::vector<DimensionHandle> dims;
+    // If the begin and sizes tensors are available, then
+    // we can be precise about the shape of the output.
+    if (sizes_value->dtype() == DT_INT64) {
+      TF_RETURN_IF_ERROR(
+          SliceHelper<int64>(c, begin_value, sizes_value, &dims));
+    } else {
+      TF_RETURN_IF_ERROR(
+          SliceHelper<int32>(c, begin_value, sizes_value, &dims));
+    }
+    c->set_output(0, c->MakeShape(dims));
+    return Status::OK();
+  } else {
+    // In case `sizes` is not available (`sizes_value` is null),
+    // we could try to use `MakeShapeFromShapeTensor` here.
+    // If sizes contain -1, we will simply consider it as `Unknown`.
+    // This is less than ideal but still an improvement of shape inference.
+    // The following is an example that returns [None, 1, None] with this
+    // code path:
+    //   z = tf.zeros((1, 2, 3))
+    //   m = tf.slice(z, [0, 0, 0], [tf.constant(1) + 0, 1, -1])
+    //   m.get_shape().as_list()
+    ShapeHandle sizes_value;
+    TF_RETURN_IF_ERROR(c->MakeShapeFromShapeTensor(2, &sizes_value));
+    if (c->RankKnown(sizes_value)) {
+      TF_RETURN_IF_ERROR(
+          c->WithRank(begin_value, c->Rank(sizes_value), &begin_value));
+      std::vector<DimensionHandle> dims;
+      dims.reserve(c->Rank(sizes_value));
+      for (int i = 0; i < c->Rank(sizes_value); ++i) {
+        dims.emplace_back(c->Dim(sizes_value, i));
+      }
+      c->set_output(0, c->MakeShape(dims));
+      return Status::OK();
+    }
+    // We might know the rank of the input.
+    if (c->RankKnown(input)) {
+      c->set_output(0, c->UnknownShapeOfRank(c->Rank(input)));
+      return Status::OK();
+    } else {
+      return shape_inference::UnknownShape(c);
+    }
+  }
+
   return Status::OK();
 }
 

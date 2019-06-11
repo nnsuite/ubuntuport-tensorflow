@@ -32,6 +32,7 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops.distributions import distribution
 from tensorflow.python.ops.distributions import util as distribution_util
+from tensorflow.python.util import deprecation
 
 
 __all__ = [
@@ -88,13 +89,23 @@ class InverseGamma(distribution.Distribution):
   #### Examples
 
   ```python
-  tfd = tf.contrib.distributions
+  import tensorflow_probability as tfp
+  tfd = tfp.distributions
+
   dist = tfd.InverseGamma(concentration=3.0, rate=2.0)
   dist2 = tfd.InverseGamma(concentration=[3.0, 4.0], rate=[2.0, 3.0])
   ```
 
   """
 
+  @deprecation.deprecated(
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
+      "TensorFlow Probability "
+      "(https://github.com/tensorflow/probability). You "
+      "should update all references to use `tfp.distributions` "
+      "instead of `tf.contrib.distributions`.",
+      warn_once=True)
   def __init__(self,
                concentration,
                rate,
@@ -274,6 +285,14 @@ class InverseGamma(distribution.Distribution):
 class InverseGammaWithSoftplusConcentrationRate(InverseGamma):
   """`InverseGamma` with softplus of `concentration` and `rate`."""
 
+  @deprecation.deprecated(
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
+      "TensorFlow Probability "
+      "(https://github.com/tensorflow/probability). You "
+      "should update all references to use `tfp.distributions` "
+      "instead of `tf.contrib.distributions`.",
+      warn_once=True)
   def __init__(self,
                concentration,
                rate,

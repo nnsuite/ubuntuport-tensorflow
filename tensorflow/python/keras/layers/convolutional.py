@@ -26,8 +26,8 @@ from tensorflow.python.keras import backend
 from tensorflow.python.keras import constraints
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras import regularizers
-from tensorflow.python.keras.engine import InputSpec
-from tensorflow.python.keras.engine import Layer
+from tensorflow.python.keras.engine.base_layer import InputSpec
+from tensorflow.python.keras.engine.base_layer import Layer
 # imports for backwards namespace compatibility
 # pylint: disable=unused-import
 from tensorflow.python.keras.layers.pooling import AveragePooling1D
@@ -64,7 +64,7 @@ class Conv(Layer):
       specifying the stride length of the convolution.
       Specifying any stride value != 1 is incompatible with specifying
       any `dilation_rate` value != 1.
-    padding: One of `"valid"` or `"same"` (case-insensitive).
+    padding: One of `"valid"`,  `"same"`, or `"causal"` (case-insensitive).
     data_format: A string, one of `channels_last` (default) or `channels_first`.
       The ordering of the dimensions in the inputs.
       `channels_last` corresponds to inputs with shape
@@ -126,6 +126,10 @@ class Conv(Layer):
         kernel_size, rank, 'kernel_size')
     self.strides = conv_utils.normalize_tuple(strides, rank, 'strides')
     self.padding = conv_utils.normalize_padding(padding)
+    if (self.padding == 'causal' and not isinstance(self,
+                                                    (Conv1D, SeparableConv1D))):
+      raise ValueError('Causal padding is only supported for `Conv1D`'
+                       'and ``SeparableConv1D`.')
     self.data_format = conv_utils.normalize_data_format(data_format)
     self.dilation_rate = conv_utils.normalize_tuple(
         dilation_rate, rank, 'dilation_rate')
@@ -151,31 +155,37 @@ class Conv(Layer):
     input_dim = int(input_shape[channel_axis])
     kernel_shape = self.kernel_size + (input_dim, self.filters)
 
-    self.kernel = self.add_variable(name='kernel',
-                                    shape=kernel_shape,
-                                    initializer=self.kernel_initializer,
-                                    regularizer=self.kernel_regularizer,
-                                    constraint=self.kernel_constraint,
-                                    trainable=True,
-                                    dtype=self.dtype)
+    self.kernel = self.add_weight(
+        name='kernel',
+        shape=kernel_shape,
+        initializer=self.kernel_initializer,
+        regularizer=self.kernel_regularizer,
+        constraint=self.kernel_constraint,
+        trainable=True,
+        dtype=self.dtype)
     if self.use_bias:
-      self.bias = self.add_variable(name='bias',
-                                    shape=(self.filters,),
-                                    initializer=self.bias_initializer,
-                                    regularizer=self.bias_regularizer,
-                                    constraint=self.bias_constraint,
-                                    trainable=True,
-                                    dtype=self.dtype)
+      self.bias = self.add_weight(
+          name='bias',
+          shape=(self.filters,),
+          initializer=self.bias_initializer,
+          regularizer=self.bias_regularizer,
+          constraint=self.bias_constraint,
+          trainable=True,
+          dtype=self.dtype)
     else:
       self.bias = None
     self.input_spec = InputSpec(ndim=self.rank + 2,
                                 axes={channel_axis: input_dim})
+    if self.padding == 'causal':
+      op_padding = 'valid'
+    else:
+      op_padding = self.padding
     self._convolution_op = nn_ops.Convolution(
         input_shape,
         filter_shape=self.kernel.get_shape(),
         dilation_rate=self.dilation_rate,
         strides=self.strides,
-        padding=self.padding.upper(),
+        padding=op_padding.upper(),
         data_format=conv_utils.convert_data_format(self.data_format,
                                                    self.rank + 2))
     self.built = True
@@ -261,6 +271,15 @@ class Conv(Layer):
     }
     base_config = super(Conv, self).get_config()
     return dict(list(base_config.items()) + list(config.items()))
+
+  def _compute_causal_padding(self):
+    """Calculates padding for 'causal' option for 1-d conv layers."""
+    left_pad = self.dilation_rate[0] * (self.kernel_size[0] - 1)
+    if self.data_format == 'channels_last':
+      causal_padding = [[0, 0], [left_pad, 0], [0, 0]]
+    else:
+      causal_padding = [[0, 0], [0, 0], [left_pad, 0]]
+    return causal_padding
 
 
 @tf_export('keras.layers.Conv1D', 'keras.layers.Convolution1D')
@@ -359,6 +378,11 @@ class Conv1D(Conv):
         bias_constraint=constraints.get(bias_constraint),
         **kwargs)
 
+  def call(self, inputs):
+    if self.padding == 'causal':
+      inputs = array_ops.pad(inputs, self._compute_causal_padding())
+    return super(Conv1D, self).call(inputs)
+
 
 @tf_export('keras.layers.Conv2D', 'keras.layers.Convolution2D')
 class Conv2D(Conv):
@@ -380,11 +404,11 @@ class Conv2D(Conv):
       filters: Integer, the dimensionality of the output space
           (i.e. the number of output filters in the convolution).
       kernel_size: An integer or tuple/list of 2 integers, specifying the
-          width and height of the 2D convolution window.
+          height and width of the 2D convolution window.
           Can be a single integer to specify the same value for
           all spatial dimensions.
       strides: An integer or tuple/list of 2 integers,
-          specifying the strides of the convolution along the width and height.
+          specifying the strides of the convolution along the height and width.
           Can be a single integer to specify the same value for
           all spatial dimensions.
           Specifying any stride value != 1 is incompatible with specifying
@@ -611,11 +635,11 @@ class Conv2DTranspose(Conv2D):
       filters: Integer, the dimensionality of the output space
           (i.e. the number of output filters in the convolution).
       kernel_size: An integer or tuple/list of 2 integers, specifying the
-          width and height of the 2D convolution window.
+          height and width of the 2D convolution window.
           Can be a single integer to specify the same value for
           all spatial dimensions.
       strides: An integer or tuple/list of 2 integers,
-          specifying the strides of the convolution along the width and height.
+          specifying the strides of the convolution along the height and width.
           Can be a single integer to specify the same value for
           all spatial dimensions.
           Specifying any stride value != 1 is incompatible with specifying
@@ -720,21 +744,23 @@ class Conv2DTranspose(Conv2D):
     self.input_spec = InputSpec(ndim=4, axes={channel_axis: input_dim})
     kernel_shape = self.kernel_size + (self.filters, input_dim)
 
-    self.kernel = self.add_variable(name='kernel',
-                                    shape=kernel_shape,
-                                    initializer=self.kernel_initializer,
-                                    regularizer=self.kernel_regularizer,
-                                    constraint=self.kernel_constraint,
-                                    trainable=True,
-                                    dtype=self.dtype)
+    self.kernel = self.add_weight(
+        name='kernel',
+        shape=kernel_shape,
+        initializer=self.kernel_initializer,
+        regularizer=self.kernel_regularizer,
+        constraint=self.kernel_constraint,
+        trainable=True,
+        dtype=self.dtype)
     if self.use_bias:
-      self.bias = self.add_variable(name='bias',
-                                    shape=(self.filters,),
-                                    initializer=self.bias_initializer,
-                                    regularizer=self.bias_regularizer,
-                                    constraint=self.bias_constraint,
-                                    trainable=True,
-                                    dtype=self.dtype)
+      self.bias = self.add_weight(
+          name='bias',
+          shape=(self.filters,),
+          initializer=self.bias_initializer,
+          regularizer=self.bias_regularizer,
+          constraint=self.bias_constraint,
+          trainable=True,
+          dtype=self.dtype)
     else:
       self.bias = None
     self.built = True
@@ -961,7 +987,7 @@ class Conv3DTranspose(Conv3D):
     kernel_shape = self.kernel_size + (self.filters, input_dim)
     self.input_spec = InputSpec(ndim=5, axes={channel_axis: input_dim})
 
-    self.kernel = self.add_variable(
+    self.kernel = self.add_weight(
         'kernel',
         shape=kernel_shape,
         initializer=self.kernel_initializer,
@@ -970,7 +996,7 @@ class Conv3DTranspose(Conv3D):
         trainable=True,
         dtype=self.dtype)
     if self.use_bias:
-      self.bias = self.add_variable(
+      self.bias = self.add_weight(
           'bias',
           shape=(self.filters,),
           initializer=self.bias_initializer,
@@ -1191,6 +1217,7 @@ class SeparableConv(Conv):
         dilation_rate=dilation_rate,
         activation=activations.get(activation),
         use_bias=use_bias,
+        bias_initializer=initializers.get(bias_initializer),
         bias_regularizer=regularizers.get(bias_regularizer),
         activity_regularizer=regularizers.get(activity_regularizer),
         bias_constraint=bias_constraint,
@@ -1222,7 +1249,7 @@ class SeparableConv(Conv):
     pointwise_kernel_shape = (
         1,) * self.rank + (self.depth_multiplier * input_dim, self.filters)
 
-    self.depthwise_kernel = self.add_variable(
+    self.depthwise_kernel = self.add_weight(
         name='depthwise_kernel',
         shape=depthwise_kernel_shape,
         initializer=self.depthwise_initializer,
@@ -1230,7 +1257,7 @@ class SeparableConv(Conv):
         constraint=self.depthwise_constraint,
         trainable=True,
         dtype=self.dtype)
-    self.pointwise_kernel = self.add_variable(
+    self.pointwise_kernel = self.add_weight(
         name='pointwise_kernel',
         shape=pointwise_kernel_shape,
         initializer=self.pointwise_initializer,
@@ -1239,13 +1266,14 @@ class SeparableConv(Conv):
         trainable=True,
         dtype=self.dtype)
     if self.use_bias:
-      self.bias = self.add_variable(name='bias',
-                                    shape=(self.filters,),
-                                    initializer=self.bias_initializer,
-                                    regularizer=self.bias_regularizer,
-                                    constraint=self.bias_constraint,
-                                    trainable=True,
-                                    dtype=self.dtype)
+      self.bias = self.add_weight(
+          name='bias',
+          shape=(self.filters,),
+          initializer=self.bias_initializer,
+          regularizer=self.bias_regularizer,
+          constraint=self.bias_constraint,
+          trainable=True,
+          dtype=self.dtype)
     else:
       self.bias = None
     self.built = True
@@ -1255,31 +1283,44 @@ class SeparableConv(Conv):
 
   def get_config(self):
     config = {
-        'filters': self.filters,
-        'kernel_size': self.kernel_size,
-        'strides': self.strides,
-        'padding': self.padding,
-        'data_format': self.data_format,
-        'dilation_rate': self.dilation_rate,
-        'activation': activations.serialize(self.activation),
-        'use_bias': self.use_bias,
+        'filters':
+            self.filters,
+        'kernel_size':
+            self.kernel_size,
+        'strides':
+            self.strides,
+        'padding':
+            self.padding,
+        'data_format':
+            self.data_format,
+        'depth_multiplier':
+            self.depth_multiplier,
+        'dilation_rate':
+            self.dilation_rate,
+        'activation':
+            activations.serialize(self.activation),
+        'use_bias':
+            self.use_bias,
         'depthwise_initializer':
             initializers.serialize(self.depthwise_initializer),
         'pointwise_initializer':
             initializers.serialize(self.pointwise_initializer),
-        'bias_initializer': initializers.serialize(self.bias_initializer),
+        'bias_initializer':
+            initializers.serialize(self.bias_initializer),
         'depthwise_regularizer':
             regularizers.serialize(self.depthwise_regularizer),
         'pointwise_regularizer':
             regularizers.serialize(self.pointwise_regularizer),
-        'bias_regularizer': regularizers.serialize(self.bias_regularizer),
+        'bias_regularizer':
+            regularizers.serialize(self.bias_regularizer),
         'activity_regularizer':
             regularizers.serialize(self.activity_regularizer),
         'depthwise_constraint':
             constraints.serialize(self.depthwise_constraint),
         'pointwise_constraint':
             constraints.serialize(self.pointwise_constraint),
-        'bias_constraint': constraints.serialize(self.bias_constraint)
+        'bias_constraint':
+            constraints.serialize(self.bias_constraint)
     }
     base_config = super(SeparableConv, self).get_config()
     return dict(list(base_config.items()) + list(config.items()))
@@ -1305,7 +1346,7 @@ class SeparableConv1D(SeparableConv):
       of the convolution.
       Specifying any `stride` value != 1 is incompatible with specifying
       any `dilation_rate` value != 1.
-    padding: One of `"valid"` or `"same"` (case-insensitive).
+    padding: One of `"valid"`, `"same"`, or `"causal"` (case-insensitive).
     data_format: A string, one of `channels_last` (default) or `channels_first`.
       The ordering of the dimensions in the inputs.
       `channels_last` corresponds to inputs with shape
@@ -1391,6 +1432,8 @@ class SeparableConv1D(SeparableConv):
         **kwargs)
 
   def call(self, inputs):
+    if self.padding == 'causal':
+      inputs = array_ops.pad(inputs, self._compute_causal_padding())
     if self.data_format == 'channels_last':
       strides = (1,) + self.strides * 2 + (1,)
       spatial_start_dim = 1
@@ -1405,12 +1448,16 @@ class SeparableConv1D(SeparableConv):
     pointwise_kernel = array_ops.expand_dims(self.pointwise_kernel, 0)
     dilation_rate = (1,) + self.dilation_rate
 
+    if self.padding == 'causal':
+      op_padding = 'valid'
+    else:
+      op_padding = self.padding
     outputs = nn.separable_conv2d(
         inputs,
         depthwise_kernel,
         pointwise_kernel,
         strides=strides,
-        padding=self.padding.upper(),
+        padding=op_padding.upper(),
         rate=dilation_rate,
         data_format=conv_utils.convert_data_format(self.data_format, ndim=4))
 
@@ -1447,11 +1494,11 @@ class SeparableConv2D(SeparableConv):
       filters: Integer, the dimensionality of the output space
           (i.e. the number of output filters in the convolution).
       kernel_size: An integer or tuple/list of 2 integers, specifying the
-          width and height of the 2D convolution window.
+          height and width of the 2D convolution window.
           Can be a single integer to specify the same value for
           all spatial dimensions.
       strides: An integer or tuple/list of 2 integers,
-          specifying the strides of the convolution along the width and height.
+          specifying the strides of the convolution along the height and width.
           Can be a single integer to specify the same value for
           all spatial dimensions.
           Specifying any stride value != 1 is incompatible with specifying
@@ -1591,11 +1638,11 @@ class DepthwiseConv2D(Conv2D):
 
   Arguments:
     kernel_size: An integer or tuple/list of 2 integers, specifying the
-        width and height of the 2D convolution window.
+        height and width of the 2D convolution window.
         Can be a single integer to specify the same value for
         all spatial dimensions.
     strides: An integer or tuple/list of 2 integers,
-        specifying the strides of the convolution along the width and height.
+        specifying the strides of the convolution along the height and width.
         Can be a single integer to specify the same value for
         all spatial dimensions.
         Specifying any stride value != 1 is incompatible with specifying
@@ -1724,7 +1771,7 @@ class DepthwiseConv2D(Conv2D):
         dilation_rate=self.dilation_rate,
         data_format=self.data_format)
 
-    if self.bias:
+    if self.use_bias:
       outputs = backend.bias_add(
           outputs,
           self.bias,
@@ -2002,7 +2049,7 @@ class ZeroPadding2D(Layer):
   Arguments:
       padding: int, or tuple of 2 ints, or tuple of 2 tuples of 2 ints.
           - If int: the same symmetric padding
-              is applied to width and height.
+              is applied to height and width.
           - If tuple of 2 ints:
               interpreted as two different
               symmetric padding values for height and width:
@@ -2101,7 +2148,7 @@ class ZeroPadding3D(Layer):
   Arguments:
       padding: int, or tuple of 3 ints, or tuple of 3 tuples of 2 ints.
           - If int: the same symmetric padding
-              is applied to width and height.
+              is applied to height and width.
           - If tuple of 3 ints:
               interpreted as two different
               symmetric padding values for height and width:
@@ -2261,12 +2308,12 @@ class Cropping1D(Layer):
 class Cropping2D(Layer):
   """Cropping layer for 2D input (e.g. picture).
 
-  It crops along spatial dimensions, i.e. width and height.
+  It crops along spatial dimensions, i.e. height and width.
 
   Arguments:
       cropping: int, or tuple of 2 ints, or tuple of 2 tuples of 2 ints.
           - If int: the same symmetric cropping
-              is applied to width and height.
+              is applied to height and width.
           - If tuple of 2 ints:
               interpreted as two different
               symmetric cropping values for height and width:

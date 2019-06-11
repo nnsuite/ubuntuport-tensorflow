@@ -31,6 +31,7 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops.distributions import distribution
 from tensorflow.python.ops.distributions import special_math
+from tensorflow.python.util import deprecation
 
 
 __all__ = [
@@ -65,15 +66,18 @@ class HalfNormal(distribution.Distribution):
   Examples of initialization of one or a batch of distributions.
 
   ```python
+  import tensorflow_probability as tfp
+  tfd = tfp.distributions
+
   # Define a single scalar HalfNormal distribution.
-  dist = tf.contrib.distributions.HalfNormal(scale=3.0)
+  dist = tfd.HalfNormal(scale=3.0)
 
   # Evaluate the cdf at 1, returning a scalar.
   dist.cdf(1.)
 
   # Define a batch of two scalar valued HalfNormals.
   # The first has scale 11.0, the second 22.0
-  dist = tf.contrib.distributions.HalfNormal(scale=[11.0, 22.0])
+  dist = tfd.HalfNormal(scale=[11.0, 22.0])
 
   # Evaluate the pdf of the first distribution on 1.0, and the second on 1.5,
   # returning a length two tensor.
@@ -85,6 +89,14 @@ class HalfNormal(distribution.Distribution):
 
   """
 
+  @deprecation.deprecated(
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
+      "TensorFlow Probability "
+      "(https://github.com/tensorflow/probability). You "
+      "should update all references to use `tfp.distributions` "
+      "instead of `tf.contrib.distributions`.",
+      warn_once=True)
   def __init__(self,
                scale,
                validate_args=False,

@@ -18,11 +18,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.python.eager import context
+from tensorflow.python.framework import ops
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import constraints
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras import regularizers
-from tensorflow.python.keras.engine import Layer
+from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import embedding_ops
 from tensorflow.python.ops import math_ops
@@ -112,23 +114,39 @@ class Embedding(Layer):
     self.activity_regularizer = regularizers.get(activity_regularizer)
     self.embeddings_constraint = constraints.get(embeddings_constraint)
     self.mask_zero = mask_zero
+    self.supports_masking = mask_zero
     self.input_length = input_length
 
   @tf_utils.shape_type_conversion
   def build(self, input_shape):
-    self.embeddings = self.add_weight(
-        shape=(self.input_dim, self.output_dim),
-        initializer=self.embeddings_initializer,
-        name='embeddings',
-        regularizer=self.embeddings_regularizer,
-        constraint=self.embeddings_constraint)
+    # Note: most sparse optimizers do not have GPU kernels defined. When
+    # building graphs, the placement algorithm is able to place variables on CPU
+    # since it knows all kernels using the variable only exist on CPU.
+    # When eager execution is enabled, the placement decision has to be made
+    # right now. Checking for the presence of GPUs to avoid complicating the
+    # TPU codepaths which can handle sparse optimizers.
+    if context.executing_eagerly() and context.context().num_gpus():
+      with ops.device('cpu:0'):
+        self.embeddings = self.add_weight(
+            shape=(self.input_dim, self.output_dim),
+            initializer=self.embeddings_initializer,
+            name='embeddings',
+            regularizer=self.embeddings_regularizer,
+            constraint=self.embeddings_constraint)
+    else:
+      self.embeddings = self.add_weight(
+          shape=(self.input_dim, self.output_dim),
+          initializer=self.embeddings_initializer,
+          name='embeddings',
+          regularizer=self.embeddings_regularizer,
+          constraint=self.embeddings_constraint)
     self.built = True
 
   def compute_mask(self, inputs, mask=None):
     if not self.mask_zero:
       return None
-    else:
-      return math_ops.not_equal(inputs, 0)
+
+    return math_ops.not_equal(inputs, 0)
 
   @tf_utils.shape_type_conversion
   def compute_output_shape(self, input_shape):

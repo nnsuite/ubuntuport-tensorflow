@@ -22,6 +22,7 @@ from tensorflow.contrib.distributions.python.ops import distribution_util
 from tensorflow.contrib.distributions.python.ops import mvn_linear_operator as mvn_linop
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import nn
+from tensorflow.python.util import deprecation
 
 
 __all__ = [
@@ -84,7 +85,8 @@ class MultivariateNormalDiag(
   #### Examples
 
   ```python
-  tfd = tf.contrib.distributions
+  import tensorflow_probability as tfp
+  tfd = tfp.distributions
 
   # Initialize a single 2-variate Gaussian.
   mvn = tfd.MultivariateNormalDiag(
@@ -134,6 +136,14 @@ class MultivariateNormalDiag(
 
   """
 
+  @deprecation.deprecated(
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
+      "TensorFlow Probability "
+      "(https://github.com/tensorflow/probability). You "
+      "should update all references to use `tfp.distributions` "
+      "instead of `tf.contrib.distributions`.",
+      warn_once=True)
   def __init__(self,
                loc=None,
                scale_diag=None,
@@ -218,6 +228,14 @@ class MultivariateNormalDiag(
 class MultivariateNormalDiagWithSoftplusScale(MultivariateNormalDiag):
   """MultivariateNormalDiag with `diag_stddev = softplus(diag_stddev)`."""
 
+  @deprecation.deprecated(
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
+      "TensorFlow Probability "
+      "(https://github.com/tensorflow/probability). You "
+      "should update all references to use `tfp.distributions` "
+      "instead of `tf.contrib.distributions`.",
+      warn_once=True)
   def __init__(self,
                loc,
                scale_diag,

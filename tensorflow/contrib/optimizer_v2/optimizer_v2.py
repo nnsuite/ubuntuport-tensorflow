@@ -30,10 +30,10 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gradients
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import resource_variable_ops
-from tensorflow.python.ops import state_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import distribute as distribute_lib
+from tensorflow.python.training import distribution_strategy_context
 from tensorflow.python.training import optimizer as optimizer_v1
 from tensorflow.python.training import slot_creator
 from tensorflow.python.training.checkpointable import base as checkpointable
@@ -162,12 +162,12 @@ def _get_processor(v):
 def _var_key_v2(var):
   """Key for representing a primary variable, for looking up slots."""
   # pylint: disable=protected-access
-  if hasattr(var, "_mirrored_container"):
-    mirrored_container = var._mirrored_container()
-    assert mirrored_container is not None
+  if hasattr(var, "_distributed_container"):
+    distributed_container = var._distributed_container()
+    assert distributed_container is not None
     if context.executing_eagerly():
-      return mirrored_container._unique_id
-    return mirrored_container._shared_name
+      return distributed_container._unique_id
+    return distributed_container._shared_name
   if context.executing_eagerly():
     return var._unique_id
   return var.op.name
@@ -211,8 +211,10 @@ class _OptimizerV2State(object):
     # This dict starts with a single item with key "None" with the hyper
     # parameter value converted to a Tensor. Other items have dtype keys
     # with that Tensor cast to that dtype.
-    self._hyper = {name: {None: ops.convert_to_tensor(value, name=name)}
-                   for name, (dynamic, value) in hyper.items() if not dynamic}
+    with ops.init_scope():
+      self._hyper = {name: {None: ops.convert_to_tensor(value, name=name)}
+                     for name, (dynamic, value) in sorted(hyper.items())
+                     if not dynamic}
     self._slots = {}
     self._non_slot_dict = {}
     # Extra state to help Optimizers implement Checkpointable. Holds information
@@ -229,7 +231,8 @@ class _OptimizerV2State(object):
     ret._deferred_dependencies = self._deferred_dependencies
     ret._deferred_slot_restorations = self._deferred_slot_restorations
     ret._hyper = {name: {None: _resolve(value, name)}
-                  for name, (dynamic, value) in hyper.items() if dynamic}
+                  for name, (dynamic, value) in sorted(hyper.items())
+                  if dynamic}
     ret._hyper.update(self._hyper)
     ret._non_slot_devices = non_slot_devices
     ret._distribution = distribution
@@ -619,7 +622,7 @@ class OptimizerV2(optimizer_v1.Optimizer):
     # Map from graph_key to state for that graph. We use the graph_key
     # since it works in both eager and graph mode, and gives the outer
     # graph inside functions.
-    tower_context = distribute_lib.get_tower_context()
+    tower_context = distribution_strategy_context.get_tower_context()
     if tower_context is None:
       # In a cross-tower context for a DistributionStrategy, which means
       # only one Optimizer will be created, not one per tower.
@@ -765,9 +768,11 @@ class OptimizerV2(optimizer_v1.Optimizer):
         # *after* loss() is evaluated, so we know what loss reduction it uses.
         if scale_loss_by_num_towers is None:
           scale_loss_by_num_towers = (
-              distribute_lib.get_loss_reduction() == "mean")
+              distribute_lib.get_loss_reduction() ==
+              variable_scope.VariableAggregation.MEAN)
         if scale_loss_by_num_towers:
-          num_towers = distribute_lib.get_distribution_strategy().num_towers
+          num_towers = distribution_strategy_context.get_distribution_strategy(
+          ).num_towers
           if num_towers > 1:
             loss_value *= 1. / num_towers
 
@@ -783,9 +788,11 @@ class OptimizerV2(optimizer_v1.Optimizer):
     # Scale loss for number of towers (non-callable-loss case).
     if scale_loss_by_num_towers is None:
       scale_loss_by_num_towers = (
-          distribute_lib.get_loss_reduction() == "mean")
+          distribute_lib.get_loss_reduction() ==
+          variable_scope.VariableAggregation.MEAN)
     if scale_loss_by_num_towers:
-      num_towers = distribute_lib.get_distribution_strategy().num_towers
+      num_towers = distribution_strategy_context.get_distribution_strategy(
+      ).num_towers
       if num_towers > 1:
         loss *= 1. / num_towers
 
@@ -859,7 +866,7 @@ class OptimizerV2(optimizer_v1.Optimizer):
     if not filtered:
       raise ValueError("No gradients provided for any variable: %s." %
                        ([str(v) for _, v in grads_and_vars],))
-    return distribute_lib.get_tower_context().merge_call(
+    return distribution_strategy_context.get_tower_context().merge_call(
         self._distributed_apply, filtered, global_step=global_step, name=name)
 
   def _get_or_create_state(self, var_list=None):
@@ -895,7 +902,8 @@ class OptimizerV2(optimizer_v1.Optimizer):
 
   def _distributed_apply(self, distribution, grads_and_vars, global_step, name):
     """`apply_gradients` for use with a `DistributionStrategy`."""
-    reduced_grads = distribution.batch_reduce("sum", grads_and_vars)
+    reduced_grads = distribution.batch_reduce(
+        variable_scope.VariableAggregation.SUM, grads_and_vars)
     var_list = [v for _, v in grads_and_vars]
     grads_and_vars = zip(reduced_grads, var_list)
 
@@ -956,8 +964,7 @@ class OptimizerV2(optimizer_v1.Optimizer):
       # Use the processors to update the variables.
       update_ops = []
       for grad, var in grads_and_vars:
-        update_ops.extend(distribution.unwrap(distribution.update(
-            var, update, grad)))
+        update_ops.extend(distribution.update(var, update, grad, grouped=False))
 
       # Give the child class a chance to do something after applying
       # gradients
@@ -969,26 +976,24 @@ class OptimizerV2(optimizer_v1.Optimizer):
 
       update_ops = control_flow_ops.group(update_ops)
       with ops.control_dependencies([update_ops]):
-        finish_updates = distribution.update_non_slot(non_slot_devices, finish)
-      if finish_updates is None:
-        finish_updates = update_ops
+        finish_updates = distribution.update_non_slot(
+            non_slot_devices, finish, grouped=False)
+      # We said grouped=False, which means finish_updates is always a list.
+      # It will be [None] when finish() returns None.
+      if finish_updates == [None]:
+        finish_updates = [update_ops]
 
       # Update `global_step` (if any).
       if global_step is None:
         apply_updates = distribution.group(finish_updates, name=name)
       else:
-        with ops.control_dependencies(distribution.unwrap(finish_updates)):
+        with ops.control_dependencies(finish_updates):
 
-          def update_global_step(global_step):
-            if isinstance(global_step, resource_variable_ops.ResourceVariable):
-              return global_step.assign_add(
-                  ops.convert_to_tensor(1, dtype=global_step.dtype),
-                  read_value=False)
-            else:
-              return state_ops.assign_add(global_step, 1)
+          def update_global_step(global_step, name):
+            return global_step.assign_add(1, read_value=False, name=name)
 
-          apply_updates = distribution.group(
-              distribution.update(global_step, update_global_step), name=name)
+          apply_updates = distribution.update(
+              global_step, update_global_step, name)
 
       # Add the training op to the TRAIN_OP graph collection in graph mode.
       if not eager_execution:

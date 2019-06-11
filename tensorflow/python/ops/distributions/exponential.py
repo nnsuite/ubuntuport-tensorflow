@@ -103,9 +103,6 @@ class Exponential(gamma.Gamma):
         allow_nan_stats=allow_nan_stats,
         validate_args=validate_args,
         name=name)
-    # While the Gamma distribution is not reparameterizable, the exponential
-    # distribution is.
-    self._reparameterization_type = True
     self._parameters = parameters
     self._graph_parents += [self._rate]
 
@@ -116,6 +113,9 @@ class Exponential(gamma.Gamma):
   @property
   def rate(self):
     return self._rate
+
+  def _log_survival_function(self, value):
+    return self._log_prob(value) - math_ops.log(self._rate)
 
   def _sample_n(self, n, seed=None):
     shape = array_ops.concat([[n], array_ops.shape(self._rate)], 0)

@@ -19,8 +19,6 @@ from __future__ import print_function
 
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import convert
-from tensorflow.python.data.util import nest
-from tensorflow.python.data.util import sparse
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
@@ -62,6 +60,9 @@ class TextLineDataset(dataset_ops.Dataset):
   def _as_variant_tensor(self):
     return gen_dataset_ops.text_line_dataset(
         self._filenames, self._compression_type, self._buffer_size)
+
+  def _inputs(self):
+    return []
 
   @property
   def output_classes(self):
@@ -107,6 +108,9 @@ class _TFRecordDataset(dataset_ops.Dataset):
     return gen_dataset_ops.tf_record_dataset(
         self._filenames, self._compression_type, self._buffer_size)
 
+  def _inputs(self):
+    return []
+
   @property
   def output_classes(self):
     return ops.Tensor
@@ -125,7 +129,7 @@ class ParallelInterleaveDataset(dataset_ops.InterleaveDataset):
 
   def __init__(self, input_dataset, map_func, cycle_length, block_length,
                sloppy, buffer_output_elements, prefetch_input_elements):
-    """See `tf.contrib.data.parallel_interleave()` for details."""
+    """See `tf.data.experimental.parallel_interleave()` for details."""
     super(ParallelInterleaveDataset, self).__init__(input_dataset, map_func,
                                                     cycle_length, block_length)
     self._sloppy = ops.convert_to_tensor(
@@ -150,11 +154,11 @@ class ParallelInterleaveDataset(dataset_ops.InterleaveDataset):
         self._buffer_output_elements,
         self._prefetch_input_elements,
         f=self._map_func,
-        output_types=nest.flatten(
-            sparse.as_dense_types(self.output_types, self.output_classes)),
-        output_shapes=nest.flatten(
-            sparse.as_dense_shapes(self.output_shapes, self.output_classes)))
+        **dataset_ops.flat_structure(self))
     # pylint: enable=protected-access
+
+  def _transformation_name(self):
+    return "tf.data.experimental.parallel_interleave()"
 
 
 @tf_export("data.TFRecordDataset")
@@ -226,6 +230,9 @@ class TFRecordDataset(dataset_ops.Dataset):
   def _as_variant_tensor(self):
     return self._impl._as_variant_tensor()  # pylint: disable=protected-access
 
+  def _inputs(self):
+    return self._impl._inputs()  # pylint: disable=protected-access
+
   @property
   def output_classes(self):
     return self._impl.output_classes
@@ -279,6 +286,9 @@ class FixedLengthRecordDataset(dataset_ops.Dataset):
     return gen_dataset_ops.fixed_length_record_dataset(
         self._filenames, self._header_bytes, self._record_bytes,
         self._footer_bytes, self._buffer_size)
+
+  def _inputs(self):
+    return []
 
   @property
   def output_classes(self):

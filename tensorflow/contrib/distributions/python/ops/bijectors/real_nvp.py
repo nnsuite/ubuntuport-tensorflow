@@ -26,6 +26,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import template as template_ops
 from tensorflow.python.ops.distributions import bijector
+from tensorflow.python.util import deprecation
 
 
 __all__ = [
@@ -89,8 +90,9 @@ class RealNVP(bijector.Bijector):
   #### Example Use
 
   ```python
-  tfd = tf.contrib.distributions
-  tfb = tfd.bijectors
+  import tensorflow_probability as tfp
+  tfd = tfp.distributions
+  tfb = tfp.bijectors
 
   # A common choice for a normalizing flow is to use a Gaussian for the base
   # distribution. (However, any continuous distribution would work.) E.g.,
@@ -126,6 +128,14 @@ class RealNVP(bijector.Bijector):
        Processing Systems_, 2017. https://arxiv.org/abs/1705.07057
   """
 
+  @deprecation.deprecated(
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
+      "TensorFlow Probability "
+      "(https://github.com/tensorflow/probability). You "
+      "should update all references to use `tfp.distributions` "
+      "instead of `tf.contrib.distributions`.",
+      warn_once=True)
   def __init__(self,
                num_masked,
                shift_and_log_scale_fn,
@@ -228,6 +238,14 @@ class RealNVP(bijector.Bijector):
     return math_ops.reduce_sum(log_scale, axis=-1)
 
 
+@deprecation.deprecated(
+    "2018-10-01",
+    "The TensorFlow Distributions library has moved to "
+    "TensorFlow Probability "
+    "(https://github.com/tensorflow/probability). You "
+    "should update all references to use `tfp.distributions` "
+    "instead of `tf.contrib.distributions`.",
+    warn_once=True)
 def real_nvp_default_template(
     hidden_layers,
     shift_only=False,

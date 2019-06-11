@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/kernels/variable_ops.h"
 #include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/lib/gtl/array_slice.h"
 
 namespace tensorflow {
 class XlaAllocator;
@@ -43,7 +44,7 @@ class XlaAllocator;
 // resource variable is not initialized, the corresponding OptionalTensor
 // will have its `present` field set to false.
 std::map<int, OptionalTensor> SnapshotResourceVariables(
-    OpKernelContext* ctx, const std::vector<int>& variables);
+    OpKernelContext* ctx, absl::Span<const int> variables);
 
 // Adapter class that wraps a Tensorflow allocator as an XLA allocator.
 // Assumes that the Tensorflow allocator permits asynchronous deallocation:
@@ -76,20 +77,36 @@ class XlaComputationLaunchContext {
   // Create a new launch context. 'allocate_xla_tensors' is true if allocated
   // output tensors and variables are always XlaTensors. If false they are
   // assumed to be "normal" device pointers.
+  // If 'use_multiple_streams' is true, tensors may be defined and used on
+  // multiple streams and so se::Events must be defined and waited for. If
+  // 'use_multiple_streams' is true, 'allocate_xla_tensors' must also be true
+  // because we track inter-stream dependencies through events inside XlaTensor
+  // objects.
   XlaComputationLaunchContext(xla::LocalClient* client,
                               xla::DeviceMemoryAllocator* xla_allocator,
-                              bool allocate_xla_tensors);
+                              bool allocate_xla_tensors,
+                              bool use_multiple_streams);
 
   // Add all inputs within `ctx` as XLA arguments (returned by arguments()).
   // `variables` is a map from TensorFlow argument number to resource variable.
+  //
+  // Assumes that the first `missing_ctx_input_prefix` inputs to the kernel are
+  // missing and adjusts input indices accordingly.  All elements in kernel's
+  // input_mapping must be greater than or equal to `missing_ctx_input_prefix`
+  // (in other words, no inputs actually required by the kernel can be missing).
   void PopulateInputs(OpKernelContext* ctx,
                       const XlaCompiler::CompilationResult* kernel,
-                      const std::map<int, OptionalTensor>& variables);
+                      const std::map<int, OptionalTensor>& variables,
+                      int missing_ctx_input_prefix);
 
   // Given the XLA output in `output`, populate all outputs of `ctx`.
-  void PopulateOutputs(OpKernelContext* ctx,
-                       const XlaCompiler::CompilationResult* kernel,
-                       xla::ScopedShapedBuffer output);
+  //
+  // Assumes that the first `missing_ctx_input_prefix` inputs to the kernel are
+  // missing and adjusts input indices accordingly.
+  Status PopulateOutputs(OpKernelContext* ctx,
+                         const XlaCompiler::CompilationResult* kernel,
+                         xla::ScopedShapedBuffer output,
+                         int missing_ctx_input_prefix);
 
   // Return the argument list. Only valid after PopulateInputs() has been
   // called.
@@ -99,6 +116,7 @@ class XlaComputationLaunchContext {
   xla::LocalClient* client_;
   xla::DeviceMemoryAllocator* xla_allocator_;
   bool allocate_xla_tensors_;
+  bool use_multiple_streams_;
   std::vector<std::unique_ptr<xla::ShapedBuffer>> arg_buffers_;
   std::vector<xla::ShapedBuffer*> arg_ptrs_;
 };
@@ -115,7 +133,11 @@ class XlaTensorBuffer : public TensorBuffer {
     data_ = const_cast<void*>(ptr);
   }
 
-  ~XlaTensorBuffer() override { allocator_->DeallocateRaw(data_); }
+  ~XlaTensorBuffer() override {
+    if (data_) {
+      allocator_->DeallocateRaw(data_);
+    }
+  }
 
   void* data() const override { return data_; }
   size_t size() const override { return expected_size_; }
@@ -156,4 +178,4 @@ xla::ScopedShapedBuffer ExtractSubShapedBuffer(
 
 }  // namespace tensorflow
 
-#endif
+#endif  // TENSORFLOW_COMPILER_JIT_XLA_LAUNCH_UTIL_H_

@@ -1,6 +1,8 @@
 # Description:
 #   TensorFlow camera demo app for Android.
 
+load("@build_bazel_rules_android//android:rules.bzl", "android_binary")
+
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
@@ -66,6 +68,7 @@ android_binary(
     srcs = glob([
         "src/**/*.java",
     ]),
+    aapt_version = "aapt",
     # Package assets from assets dir as well as all model targets. Remove undesired models
     # (and corresponding Activities in source) to reduce APK size.
     assets = [

@@ -19,11 +19,11 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
+#include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/compiler/xla/tests/literal_test_util.h"
 #include "tensorflow/compiler/xla/tests/test_utils.h"
-#include "tensorflow/compiler/xla/tools/parser/hlo_parser.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/types.h"
@@ -73,7 +73,7 @@ class HloModuleDceTest : public HloTestBase {
 
 // Tests that a while with all outputs live is unmodified.
 TEST_F(HloModuleDceTest, WhileWithLiveOutputs) {
-  auto module = tools::Parse(R"(
+  auto module = ParseHloString(R"(
   HloModule SimpleLoop
   SimpleLoop.body {
     loop_var.1 = (s32[], s32[3]{0}) parameter(0)
@@ -110,7 +110,7 @@ TEST_F(HloModuleDceTest, WhileWithLiveOutputs) {
 // Tests a while loop with one unused output (which is used in the while loop
 // body by an instruction with side-effects: rng) is unmodified.
 TEST_F(HloModuleDceTest, WhileWithUnusedSideEffectingTupleElement) {
-  auto module = tools::Parse(R"(
+  auto module = ParseHloString(R"(
   HloModule SimpleLoop
   SimpleLoop.body {
     loop_var.1 = (s32[], f32[]) parameter(0)
@@ -150,7 +150,7 @@ TEST_F(HloModuleDceTest, WhileWithUnusedSideEffectingTupleElement) {
 // Tests that a while loop with one dead tuple element at {1} has its while
 // loop body modified to make that tuple element pass-through the while body.
 TEST_F(HloModuleDceTest, OneWhileWithDeadTupleElement) {
-  auto module = tools::Parse(R"(
+  auto module = ParseHloString(R"(
   HloModule SimpleLoop
   SimpleLoop.body {
     loop_var.1 = (s32[], s32[3]{0}) parameter(0)
@@ -193,7 +193,7 @@ TEST_F(HloModuleDceTest, OneWhileWithDeadTupleElement) {
 // dead in while.body{1} and at while.result{1}) propgates liveness of this
 // tuple element to while.body{1} and at while.result{1}.
 TEST_F(HloModuleDceTest, OneWhileWithTupleElementUsedByCond) {
-  auto module = tools::Parse(R"(
+  auto module = ParseHloString(R"(
   HloModule SimpleLoop
   SimpleLoop.body {
     loop_var.1 = (s32[], s32[]) parameter(0)
@@ -235,7 +235,7 @@ TEST_F(HloModuleDceTest, OneWhileWithTupleElementUsedByCond) {
 // Tests that HloModuleDCE can remove a dead tuple element at index {1} between
 // two dependent while loops.
 TEST_F(HloModuleDceTest, TwoWhilesWithDeadTupleElement) {
-  auto module = tools::Parse(R"(
+  auto module = ParseHloString(R"(
   HloModule SimpleLoop
   SimpleLoop.body0 {
     loop_var.1 = (s32[], s32[3]{0}) parameter(0)
@@ -303,7 +303,7 @@ TEST_F(HloModuleDceTest, TwoWhilesWithDeadTupleElement) {
 // Tests that HloModuleDCE can remove a dead tuple element at while.1{0} and
 // while.2{1}, between two dependent while loops.
 TEST_F(HloModuleDceTest, TwoWhilesWithDeadTupleElementSwizzled) {
-  auto module = tools::Parse(R"(
+  auto module = ParseHloString(R"(
   HloModule SimpleLoop
   SimpleLoop.body0 {
     loop_var.1 = (s32[3]{0}, s32[]) parameter(0)
@@ -365,6 +365,78 @@ TEST_F(HloModuleDceTest, TwoWhilesWithDeadTupleElementSwizzled) {
                                                    "while.2", 0));
   EXPECT_TRUE(WhileBodyHasPassThroughTupleElement(module->entry_computation(),
                                                   "while.2", 1));
+}
+
+// Tests that a while whose body has outfeed operations is not DCE-ed.
+TEST_F(HloModuleDceTest, WhileWithOutfeed) {
+  auto module = ParseHloString(R"(
+  HloModule OutfeedLoop
+  WhileBody {
+    body_param = (s32[]) parameter(0)
+    token = token[] after-all()
+    constant.2 = s32[] constant(2)
+    outfeed_tuple = (s32[]) outfeed(constant.2, token)
+    get-tuple-element.1 = s32[] get-tuple-element(body_param), index=0
+    constant.1 = s32[] constant(1)
+    add = s32[] add(get-tuple-element.1, constant.1)
+    ROOT tuple = (s32[]) tuple(add)
+  }
+  WhileCondition {
+    cond_param = (s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(cond_param), index=0
+    constant.2 = s32[] constant(10)
+    ROOT less-than = pred[] less-than(get-tuple-element.3, constant.2)
+  }
+  ENTRY SimpleLoop {
+    constant.3 = s32[] constant(0)
+    tuple.1 = (s32[]) tuple(constant.3)
+    while = (s32[]) while(tuple.1), condition=WhileCondition,
+      body=WhileBody
+    ROOT rtuple = () tuple()
+  })")
+                    .ValueOrDie();
+
+  HloModuleDCE dce;
+  EXPECT_FALSE(dce.Run(module.get()).ValueOrDie());
+  EXPECT_FALSE(WhileBodyHasPassThroughTupleElement(module->entry_computation(),
+                                                   "while", 0));
+}
+
+// Tests that if a loop variable is not referenced outside of a kWhile, the loop
+// variable changes are not elided within the loop body, if the condition
+// computation uses them.
+TEST_F(HloModuleDceTest, WhileWithOnlyLoopVariableBumping) {
+  auto module = ParseHloString(R"(
+  HloModule InfiniteLoop
+  WhileBody {
+    body_param = (s32[], s32[]) parameter(0)
+    get-tuple-element.1 = s32[] get-tuple-element(body_param), index=0
+    get-tuple-element.2 = s32[] get-tuple-element(body_param), index=1
+    constant.1 = s32[] constant(1)
+    add = s32[] add(get-tuple-element.1, constant.1)
+    ROOT tuple = (s32[], s32[]) tuple(add, get-tuple-element.2)
+  }
+  WhileCondition {
+    cond_param = (s32[], s32[]) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(cond_param), index=0
+    constant.2 = s32[] constant(10)
+    ROOT less-than = pred[] less-than(get-tuple-element.3, constant.2)
+  }
+  ENTRY SimpleLoop {
+    p0 = (s32[]) parameter(0)
+    get-tuple-element.5 = s32[] get-tuple-element(p0), index=0
+    constant.3 = s32[] constant(0)
+    tuple.1 = (s32[], s32[]) tuple(constant.3, get-tuple-element.5)
+    while = (s32[], s32[]) while(tuple.1), condition=WhileCondition,
+      body=WhileBody
+    ROOT get-tuple-element.4 = s32[] get-tuple-element(while), index=1
+  })")
+                    .ValueOrDie();
+
+  HloModuleDCE dce;
+  EXPECT_FALSE(dce.Run(module.get()).ValueOrDie());
+  EXPECT_FALSE(WhileBodyHasPassThroughTupleElement(module->entry_computation(),
+                                                   "while", 0));
 }
 
 }  // namespace

@@ -54,7 +54,6 @@ tf_cuda_library(
         "//tensorflow/core/distributed_runtime/eager:eager_client",
         "//tensorflow/core/distributed_runtime/rpc/eager:grpc_eager_client",
         "//tensorflow/core/distributed_runtime/rpc:grpc_channel",
-        "//tensorflow/core/distributed_runtime/rpc/eager:eager_grpc_server_lib",
         "//tensorflow/core/distributed_runtime/rpc:grpc_server_lib",
         "//tensorflow/core/distributed_runtime/rpc:grpc_worker_cache",
         "//tensorflow/core/distributed_runtime/rpc:grpc_worker_service",
@@ -69,7 +68,10 @@ tf_cuda_library(
 tf_cuda_library(
     name = "c_api_internal",
     hdrs = ["c_api_internal.h"],
-    visibility = ["//tensorflow:internal"],
+    visibility = [
+        "//learning/deepmind/courier:__pkg__",
+        "//tensorflow:internal",
+    ],
     deps = [
         ":c_api",
         "//tensorflow/c:c_api",
@@ -93,10 +95,10 @@ tf_cuda_library(
         "//tensorflow/core/distributed_runtime/eager:eager_client",
         "//tensorflow/core/distributed_runtime/eager:remote_tensor_handle",
         "//tensorflow/core/distributed_runtime/rpc:grpc_channel",
+        "//tensorflow/core/distributed_runtime/rpc:grpc_server_lib",
         "//tensorflow/core/distributed_runtime/rpc:grpc_worker_cache",
         "//tensorflow/core/distributed_runtime/rpc:grpc_worker_service",
         "//tensorflow/core/distributed_runtime/rpc:rpc_rendezvous_mgr",
-        "//tensorflow/core/distributed_runtime/rpc/eager:eager_grpc_server_lib",
         "//tensorflow/core/distributed_runtime/rpc/eager:grpc_eager_client",
     ],
 )
@@ -122,6 +124,7 @@ tf_cuda_library(
 
 tf_cuda_cc_test(
     name = "c_api_test",
+    size = "small",
     srcs = [
         "c_api_debug_test.cc",
         "c_api_test.cc",
@@ -139,7 +142,7 @@ tf_cuda_cc_test(
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
-        "//tensorflow/core/distributed_runtime/rpc/eager:eager_grpc_server_lib",
+        "//tensorflow/core/distributed_runtime/rpc:grpc_server_lib",
     ],
 )
 

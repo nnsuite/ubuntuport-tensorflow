@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/contrib/lite/context.h"
+#include "tensorflow/contrib/lite/c/c_api_internal.h"
 #include "tensorflow/contrib/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/contrib/lite/kernels/internal/tensor.h"
 #include "tensorflow/contrib/lite/kernels/kernel_util.h"
@@ -70,12 +70,12 @@ TfLiteStatus SelectEval(TfLiteContext* context, TfLiteNode* node) {
 
   bool is_rank_one = !HaveSameShapes(input_condition, input_x);
 
-#define TF_LITE_SELECT(type, op)                                          \
-  reference_ops::op(GetTensorData<bool>(input_condition),                 \
-                    GetTensorDims(input_condition),                       \
-                    GetTensorData<type>(input_x), GetTensorDims(input_x), \
-                    GetTensorData<type>(input_y), GetTensorDims(input_y), \
-                    GetTensorData<type>(output), GetTensorDims(output));
+#define TF_LITE_SELECT(type, op)                                           \
+  reference_ops::op(GetTensorShape(input_condition),                       \
+                    GetTensorData<bool>(input_condition),                  \
+                    GetTensorShape(input_x), GetTensorData<type>(input_x), \
+                    GetTensorShape(input_y), GetTensorData<type>(input_y), \
+                    GetTensorShape(output), GetTensorData<type>(output));
 
 #define TF_LITE_SWITCH(type, op)                                               \
   switch (type) {                                                              \
@@ -88,6 +88,9 @@ TfLiteStatus SelectEval(TfLiteContext* context, TfLiteNode* node) {
       break;                                                                   \
     case kTfLiteUInt8:                                                         \
       TF_LITE_SELECT(uint8_t, op);                                             \
+      break;                                                                   \
+    case kTfLiteInt16:                                                         \
+      TF_LITE_SELECT(int16_t, op);                                             \
       break;                                                                   \
     case kTfLiteInt32:                                                         \
       TF_LITE_SELECT(int32_t, op);                                             \

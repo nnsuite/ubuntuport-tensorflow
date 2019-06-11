@@ -19,11 +19,14 @@ from __future__ import division
 from __future__ import print_function
 
 import copy
+import sys
 import types as python_types
+import warnings
 
 import numpy as np
 
 from tensorflow.python.eager import context
+from tensorflow.python.framework import common_shapes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras import activations
@@ -31,8 +34,8 @@ from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import constraints
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras import regularizers
-from tensorflow.python.keras.engine import InputSpec
-from tensorflow.python.keras.engine import Layer
+from tensorflow.python.keras.engine.base_layer import InputSpec
+from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import conv_utils
 from tensorflow.python.keras.utils import generic_utils
 from tensorflow.python.keras.utils import tf_utils
@@ -463,7 +466,7 @@ class Permute(Layer):
   Arguments:
       dims: Tuple of integers. Permutation pattern, does not include the
           samples dimension. Indexing starts at 1.
-          For instance, `(2, 1)` permutes the first and second dimension
+          For instance, `(2, 1)` permutes the first and second dimensions
           of the input.
 
   Input shape:
@@ -479,6 +482,11 @@ class Permute(Layer):
   def __init__(self, dims, **kwargs):
     super(Permute, self).__init__(**kwargs)
     self.dims = tuple(dims)
+    if sorted(dims) != list(range(1, len(dims) + 1)):
+      raise ValueError(
+          'Invalid permutation `dims` for Permute Layer: %s. '
+          'The set of indices in `dims` must be consecutive and start from 1.' %
+          (dims,))
     self.input_spec = InputSpec(ndim=len(self.dims) + 1)
 
   def compute_output_shape(self, input_shape):
@@ -663,23 +671,34 @@ class Lambda(Layer):
     if mask is not None:
       self.supports_masking = True
     self.mask = mask
-    if output_shape is None:
-      self._output_shape = None
-    elif isinstance(output_shape, (tuple, list)):
-      self._output_shape = tuple(output_shape)
-    else:
-      if not callable(output_shape):
-        raise TypeError('In Lambda, `output_shape` '
-                        'must be a list, a tuple, or a function.')
-      self._output_shape = output_shape
+    if (output_shape is not None and not isinstance(output_shape,
+                                                    (tuple, list)) and
+        not callable(output_shape)):
+      raise TypeError('In Lambda, `output_shape` '
+                      'must be a list, a tuple, or a function.')
+    # Convert a list representing a single shape into a tuple.
+    if (isinstance(output_shape, list) and isinstance(output_shape[0],
+                                                      (int, type(None)))):
+      output_shape = tuple(output_shape)
+    self._output_shape = output_shape
 
+  @tf_utils.shape_type_conversion
   def compute_output_shape(self, input_shape):
-    input_shape = tuple(tensor_shape.TensorShape(input_shape).as_list())
-
     if self._output_shape is None:
       if context.executing_eagerly():
-        raise NotImplementedError
-      x = K.placeholder(shape=input_shape)
+        # Make use of existing autocomputation for Eager mode but provide
+        # Lambda-specific error message.
+        try:
+          return super(Lambda, self).compute_output_shape(input_shape)
+        except NotImplementedError:
+          raise NotImplementedError('We could not automatically infer '
+                                    'the static shape of the Lambda\'s output.'
+                                    ' Please specify the `output_shape` for'
+                                    ' this Lambda.')
+      if isinstance(input_shape, list):
+        x = [K.placeholder(shape=shape) for shape in input_shape]
+      else:
+        x = K.placeholder(shape=input_shape)
       x = self.call(x)
       if isinstance(x, list):
         return [tensor_shape.TensorShape(K.int_shape(x_elem)) for x_elem in x]
@@ -690,16 +709,27 @@ class Lambda(Layer):
         num_samples = input_shape[0][0]
       else:
         num_samples = input_shape[0] if input_shape else None
-      return tensor_shape.TensorShape((num_samples,) +
-                                      tuple(self._output_shape))
+      # List here represents multiple outputs.
+      if isinstance(self._output_shape, list):
+        return [
+            tensor_shape.TensorShape((num_samples,) + tuple(single_shape))
+            for single_shape in self._output_shape
+        ]
+      return tensor_shape.TensorShape((num_samples,) + self._output_shape)
     else:
       shape = self._output_shape(input_shape)
       if not isinstance(shape, (list, tuple)):
         raise ValueError(
             '`output_shape` function must return a tuple or a list of tuples.')
+      # List here can represent multiple outputs or single output.
       if isinstance(shape, list):
-        if isinstance(shape[0], int) or shape[0] is None:
+        # Convert list representing single output into a tuple.
+        if isinstance(shape[0], (int, type(None))):
           shape = tuple(shape)
+        else:
+          return [
+              tensor_shape.TensorShape(single_shape) for single_shape in shape
+          ]
       return tensor_shape.TensorShape(shape)
 
   def call(self, inputs, mask=None):
@@ -714,6 +744,7 @@ class Lambda(Layer):
     return self.mask
 
   def get_config(self):
+    module = self.function.__module__
     if isinstance(self.function, python_types.LambdaType):
       function = generic_utils.func_dump(self.function)
       function_type = 'lambda'
@@ -721,21 +752,26 @@ class Lambda(Layer):
       function = self.function.__name__
       function_type = 'function'
 
+    output_shape_module = None
     if isinstance(self._output_shape, python_types.LambdaType):
       output_shape = generic_utils.func_dump(self._output_shape)
       output_shape_type = 'lambda'
+      output_shape_module = self._output_shape.__module__
     elif callable(self._output_shape):
       output_shape = self._output_shape.__name__
       output_shape_type = 'function'
+      output_shape_module = self._output_shape.__module__
     else:
       output_shape = self._output_shape
       output_shape_type = 'raw'
 
     config = {
         'function': function,
+        'module': module,
         'function_type': function_type,
         'output_shape': output_shape,
         'output_shape_type': output_shape_type,
+        'output_shape_module': output_shape_module,
         'arguments': self.arguments
     }
     base_config = super(Lambda, self).get_config()
@@ -745,8 +781,16 @@ class Lambda(Layer):
   def from_config(cls, config, custom_objects=None):
     config = config.copy()
     globs = globals()
+    module = config.pop('module', None)
+    if module in sys.modules:
+      globs.update(sys.modules[module].__dict__)
+    elif module is not None:
+      # Note: we don't know the name of the function if it's a lambda.
+      warnings.warn('{} is not loaded, but a Lambda layer uses it. '
+                    'It may cause errors.'.format(module)
+                    , UserWarning)
     if custom_objects:
-      globs = dict(list(globs.items()) + list(custom_objects.items()))
+      globs.update(custom_objects)
     function_type = config.pop('function_type')
     if function_type == 'function':
       # Simple lookup in custom objects
@@ -760,6 +804,14 @@ class Lambda(Layer):
     else:
       raise TypeError('Unknown function type:', function_type)
 
+    output_shape_module = config.pop('output_shape_module', None)
+    if output_shape_module in sys.modules:
+      globs.update(sys.modules[output_shape_module].__dict__)
+    elif output_shape_module is not None:
+      # Note: we don't know the name of the function if it's a lambda.
+      warnings.warn('{} is not loaded, but a Lambda layer uses it. '
+                    'It may cause errors.'.format(output_shape_module)
+                    , UserWarning)
     output_shape_type = config.pop('output_shape_type')
     if output_shape_type == 'function':
       # Simple lookup in custom objects
@@ -882,34 +934,36 @@ class Dense(Layer):
                        'should be defined. Found `None`.')
     self.input_spec = InputSpec(min_ndim=2,
                                 axes={-1: input_shape[-1].value})
-    self.kernel = self.add_variable('kernel',
-                                    shape=[input_shape[-1].value, self.units],
-                                    initializer=self.kernel_initializer,
-                                    regularizer=self.kernel_regularizer,
-                                    constraint=self.kernel_constraint,
-                                    dtype=self.dtype,
-                                    trainable=True)
+    self.kernel = self.add_weight(
+        'kernel',
+        shape=[input_shape[-1].value, self.units],
+        initializer=self.kernel_initializer,
+        regularizer=self.kernel_regularizer,
+        constraint=self.kernel_constraint,
+        dtype=self.dtype,
+        trainable=True)
     if self.use_bias:
-      self.bias = self.add_variable('bias',
-                                    shape=[self.units,],
-                                    initializer=self.bias_initializer,
-                                    regularizer=self.bias_regularizer,
-                                    constraint=self.bias_constraint,
-                                    dtype=self.dtype,
-                                    trainable=True)
+      self.bias = self.add_weight(
+          'bias',
+          shape=[self.units,],
+          initializer=self.bias_initializer,
+          regularizer=self.bias_regularizer,
+          constraint=self.bias_constraint,
+          dtype=self.dtype,
+          trainable=True)
     else:
       self.bias = None
     self.built = True
 
   def call(self, inputs):
     inputs = ops.convert_to_tensor(inputs, dtype=self.dtype)
-    shape = inputs.get_shape().as_list()
-    if len(shape) > 2:
+    rank = common_shapes.rank(inputs)
+    if rank > 2:
       # Broadcasting is required for the inputs.
-      outputs = standard_ops.tensordot(inputs, self.kernel, [[len(shape) - 1],
-                                                             [0]])
+      outputs = standard_ops.tensordot(inputs, self.kernel, [[rank - 1], [0]])
       # Reshape the output back to the original ndim of the input.
       if not context.executing_eagerly():
+        shape = inputs.get_shape().as_list()
         output_shape = shape[:-1] + [self.units]
         outputs.set_shape(output_shape)
     else:

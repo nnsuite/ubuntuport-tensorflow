@@ -20,17 +20,30 @@ limitations under the License.
 #include <unordered_set>
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/node_def.pb.h"
+#include "tensorflow/core/framework/op_def.pb.h"
 #include "tensorflow/core/platform/types.h"
 
 namespace tensorflow {
 namespace grappler {
 
+// Map a node/op's output port_id to arg_id.
+//
+// The port_id refers to the n-th tensor of the node, while the arg_id refers to
+// the n-th arg of the op. These two can be different if an op's arg is a list
+// of tensors.
+//
+// We return -1 for any invalid port_id (i.e., no corresponding arg_id).
+int OpOutputPortIdToArgId(const NodeDef& node, const OpDef& op, int port_id);
+
 // A utility class to simplify the traversal of a GraphDef.
 class GraphView {
  public:
   struct Port {
-    Port() : node(nullptr), port_id(-1) {}
+    Port() = default;
     Port(NodeDef* n, int port) : node(n), port_id(port) {}
+
+    // TODO(prazek): ports should keep the constness of GraphView.  The only way
+    // to modify graph through the view should be using MutableGraphView.
     NodeDef* node = nullptr;
     int port_id = -1;
 
@@ -111,13 +124,24 @@ class GraphView {
   std::unordered_set<Edge, HashEdge> GetFaninEdges(
       const NodeDef& node, bool include_controlling_edges) const;
 
+ protected:
+  // Add a new `node` to the graph.
+  void AddUniqueNodeOrDie(NodeDef* node);
+  // Add fanout to every `node` input.
+  void AddFanouts(NodeDef* node);
+  std::unordered_map<string, NodeDef*>* MutableNodes() { return &nodes_; }
+  GraphDef* MutableGraph() { return graph_; }
+
+  using FanoutsMapType =
+      std::unordered_map<OutputPort, std::unordered_set<InputPort, HashPort>,
+                         HashPort>;
+  FanoutsMapType* MutableFanouts() { return &fanouts_; }
+
  private:
   GraphDef* graph_;
   std::unordered_map<string, NodeDef*> nodes_;
   std::unordered_set<InputPort, HashPort> empty_set_;
-  std::unordered_map<OutputPort, std::unordered_set<InputPort, HashPort>,
-                     HashPort>
-      fanouts_;
+  FanoutsMapType fanouts_;
   std::unordered_map<const NodeDef*, int> num_regular_outputs_;
 };
 
