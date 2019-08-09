@@ -1,0 +1,5 @@
+tensorflow (1.13.1) unstable xenial bionic; urgency=medium
+
+  * Initial debian dist files for tensorflow c_api are added
+
+ -- Hyoung Joo Ahn <hello.ahn@samsung.com>  Thu, 30 Jul 2019 15:25:01 +0900

@@ -1,0 +1,51 @@
+#!/usr/bin/make -f
+
+export TF_VERSION=1.13.1
+export BAZEL_OUTPUT=/tmp/bazel_output
+
+topdir=$(shell pwd)
+buildroot=${topdir}/debian/tmp
+_libdir ?= /usr/lib
+_includedir ?= /usr/include
+packagingdir=${topdir}/debian/packages
+
+SOURCE0001=bazel_0.19.1.tar.gz
+
+%:
+	dh $@ --parallel
+
+override_dh_auto_clean:
+	rm -rf ${topdir}/temp
+
+override_dh_auto_configure:
+	mkdir -p ${topdir}/temp
+	mkdir -p ${BAZEL_OUTPUT}
+
+	packages_path=${packagingdir} $(SHELL) ${topdir}/debian/package_preparation.sh
+	tar -xf ${packagingdir}/${SOURCE0001} -C ${topdir}/temp
+
+override_dh_auto_build:
+	${topdir}/temp/usr/bin/bazel --output_user_root=${BAZEL_OUTPUT} build  --repository_cache=${packagingdir} --distdir=${packagingdir} -c opt //tensorflow/tools/lib_package:libtensorflow
+
+	### Gen .pc file ###
+	# -p, --prefix	set installation prefix (default: /usr/local)
+	# -l, --libdir	set lib directory (default: lib)
+	# -v, --version	set TensorFlow version
+	# -h, --help	display this message
+	$(SHELL) ${topdir}/tensorflow/c/generate-pc.sh -p /usr -l /lib -v ${TF_VERSION}
+
+override_dh_auto_install:
+	tar -xf ${topdir}/bazel-bin/tensorflow/tools/lib_package/libtensorflow.tar.gz
+	
+	install -d ${buildroot}
+	install -d ${buildroot}${_libdir}
+	install -d ${buildroot}${_libdir}/pkgconfig
+	install -d ${buildroot}${_includedir}
+	install -d ${buildroot}${_includedir}/tensorflow
+	install -d ${buildroot}${_includedir}/tensorflow/c
+	install -d ${buildroot}${_includedir}/tensorflow/c/eager
+
+	install -m 0644 include/tensorflow/c/*.h ${buildroot}${_includedir}/tensorflow/c/
+	install -m 0644 include/tensorflow/c/eager/*.h ${buildroot}${_includedir}/tensorflow/c/eager/
+	install -m 0644 lib/*.so ${buildroot}${_libdir}/
+	install -m 0644 tensorflow.pc ${buildroot}${_libdir}/pkgconfig/
