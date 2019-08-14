@@ -41,7 +41,7 @@ override_dh_auto_build:
 	${topdir}/temp/usr/bin/bazel --output_user_root=${BAZEL_OUTPUT} build  --repository_cache=${packagingdir} --distdir=${packagingdir} -c opt //tensorflow/tools/lib_package:libtensorflow
 endif
 
-	cd tensorflow/lite/tools/make && ./download_dependencies.sh
+	cd tensorflow/lite/tools/make && tar -xf ${packagingdir}/downloads.tar.gz
 	cd tensorflow/lite/tools/make/downloads/eigen && patch -p1 < ../../../../../../debian/eigen.patch
 	make -f tensorflow/lite/tools/make/Makefile TARGET=linux CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" -j4 clean
 	make -f tensorflow/lite/tools/make/Makefile TARGET=linux CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" -j4
