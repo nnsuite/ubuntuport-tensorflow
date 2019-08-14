@@ -16,9 +16,26 @@ Standards-Version: 1.13.1
 Homepage: https://github.sec.samsung.net/RS7-STAR/Tensorflow
 
 Package: tensorflow-c-dev
-Architecture: arm64 amd64
+Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Provides: tensorflow-dev
 Description: TensorFlow provides a C API that can be used
  to build bindings for other languages. The API is defined
  in c_api.h and designed for simplicity and uniformity
  rather than convenience.
+
+Package: tensorflow-c
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Provides: tensorflow
+Description: TensorFlow provides a C API that can be used
+ to build bindings for other languages. The API is defined
+ in c_api.h and designed for simplicity and uniformity
+ rather than convenience.
+
+Package: tensorflow-lite-dev
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: Tensorflow Lite development headers and object file
+ This package contains the Tensorflow Lite development header and
+ static library.
