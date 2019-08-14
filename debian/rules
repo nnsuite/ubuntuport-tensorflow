@@ -54,7 +54,6 @@ endif
 	$(SHELL) ${topdir}/tensorflow/c/generate-pc.sh -p /usr -l /lib -v ${TF_VERSION}
 
 override_dh_auto_install:
-	tar -xf ${topdir}/bazel-bin/tensorflow/tools/lib_package/libtensorflow.tar.gz
 	
 	install -d ${buildroot}
 	install -d ${buildroot}${_libdir}
@@ -62,6 +61,7 @@ override_dh_auto_install:
 	install -d ${buildroot}${_includedir}
 
 ifeq ($(TENSORFLOW_BUILD), yes)
+	tar -xf ${topdir}/bazel-bin/tensorflow/tools/lib_package/libtensorflow.tar.gz
 	install -d ${buildroot}${_includedir}/tensorflow
 	install -d ${buildroot}${_includedir}/tensorflow/c
 	install -d ${buildroot}${_includedir}/tensorflow/c/eager
