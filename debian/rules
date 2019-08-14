@@ -38,7 +38,8 @@ ifeq ($(TENSORFLOW_BUILD), yes)
 	tar -xf ${packagingdir}/${SOURCE0001} -C ${topdir}/temp
 
 override_dh_auto_build:
-	${topdir}/temp/usr/bin/bazel --output_user_root=${BAZEL_OUTPUT} build  --repository_cache=${packagingdir} --distdir=${packagingdir} -c opt //tensorflow/tools/lib_package:libtensorflow
+	# If it's eoan (19.10), gcc-9 has some regressions. Use gcc-8 instead if it's eoan.
+	if [ -f /usr/bin/gcc-8 ]; then export CC=gcc-8; export CXX=g++-8; fi; ${topdir}/temp/usr/bin/bazel --output_user_root=${BAZEL_OUTPUT} build  --repository_cache=${packagingdir} --distdir=${packagingdir} -c opt //tensorflow/tools/lib_package:libtensorflow
 endif
 
 	cd tensorflow/lite/tools/make && tar -xf ${packagingdir}/downloads.tar.gz
