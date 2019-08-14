@@ -5,7 +5,7 @@ Maintainer: Hyoung Joo Ahn <hello.ahn@samsung.com>
 Build-Depends: 
  debhelper (>=9),
  bash-completion,
- g++,
+ g++-6 | g++-7 | g++-8,
  wget,
  zlib1g-dev,
  python-pip,
