@@ -88,6 +88,7 @@ endif
 	ln -sf ${_includedir}/tensorflow/lite ${buildroot}/${_includedir}/tensorflow/contrib/lite
 
 	find tensorflow/lite/tools/make/gen/ -name "libtensorflow-lite.a" -type f -exec cp '{}' ${buildroot}${_libdir}/ \;
+	install -m 0644 tensorflow/lite/*.h ${buildroot}${_includedir}/tensorflow/lite/
 	install -m 0644 tensorflow/lite/kernels/*.h ${buildroot}${_includedir}/tensorflow/lite/kernels
 	install -m 0644 tensorflow/lite/c/*.h ${buildroot}${_includedir}/tensorflow/lite/c
 	install -m 0644 tensorflow/lite/core/*.h ${buildroot}${_includedir}/tensorflow/lite/core
