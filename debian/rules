@@ -1,5 +1,16 @@
 #!/usr/bin/make -f
 
+DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
+ifeq ($(DEB_HOST_ARCH), amd64)
+TENSORFLOW_BUILD := yes
+else
+TENSORFLOW_BUILD := no
+endif
+SHELL := /bin/bash
+
+CXXFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC
+CFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC
+
 export TF_VERSION=1.13.1
 export BAZEL_OUTPUT=/tmp/bazel_output
 
@@ -18,6 +29,8 @@ override_dh_auto_clean:
 	rm -rf ${topdir}/temp
 
 override_dh_auto_configure:
+
+ifeq ($(TENSORFLOW_BUILD), yes)
 	mkdir -p ${topdir}/temp
 	mkdir -p ${BAZEL_OUTPUT}
 
@@ -26,6 +39,12 @@ override_dh_auto_configure:
 
 override_dh_auto_build:
 	${topdir}/temp/usr/bin/bazel --output_user_root=${BAZEL_OUTPUT} build  --repository_cache=${packagingdir} --distdir=${packagingdir} -c opt //tensorflow/tools/lib_package:libtensorflow
+endif
+
+	cd tensorflow/lite/tools/make && ./download_dependencies.sh
+	cd tensorflow/lite/tools/make/downloads/eigen && patch -p1 < ../../../../../../debian/eigen.patch
+	make -f tensorflow/lite/tools/make/Makefile TARGET=linux CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" -j4 clean
+	make -f tensorflow/lite/tools/make/Makefile TARGET=linux CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" -j4
 
 	### Gen .pc file ###
 	# -p, --prefix	set installation prefix (default: /usr/local)
@@ -41,6 +60,8 @@ override_dh_auto_install:
 	install -d ${buildroot}${_libdir}
 	install -d ${buildroot}${_libdir}/pkgconfig
 	install -d ${buildroot}${_includedir}
+
+ifeq ($(TENSORFLOW_BUILD), yes)
 	install -d ${buildroot}${_includedir}/tensorflow
 	install -d ${buildroot}${_includedir}/tensorflow/c
 	install -d ${buildroot}${_includedir}/tensorflow/c/eager
@@ -49,3 +70,31 @@ override_dh_auto_install:
 	install -m 0644 include/tensorflow/c/eager/*.h ${buildroot}${_includedir}/tensorflow/c/eager/
 	install -m 0644 lib/*.so ${buildroot}${_libdir}/
 	install -m 0644 tensorflow.pc ${buildroot}${_libdir}/pkgconfig/
+endif
+
+# TF-Lite
+
+	install -d ${buildroot}${_includedir}/tensorflow/lite
+	install -d ${buildroot}${_includedir}/tensorflow/lite/kernels
+	install -d ${buildroot}${_includedir}/tensorflow/lite/c
+	install -d ${buildroot}${_includedir}/tensorflow/lite/core
+	install -d ${buildroot}${_includedir}/tensorflow/lite/core/api
+	install -d ${buildroot}${_includedir}/tensorflow/lite/tools
+	install -d ${buildroot}${_includedir}/tensorflow/lite/schema
+	install -d ${buildroot}${_includedir}/tensorflow/lite/profiling
+	install -d ${buildroot}${_includedir}/flatbuffers
+	install -d ${buildroot}${_includedir}/tensorflow/contrib
+	ln -sf ${_includedir}/tensorflow/lite ${buildroot}/${_includedir}/tensorflow/contrib/lite
+
+	find tensorflow/lite/tools/make/gen/ -name "libtensorflow-lite.a" -type f -exec cp '{}' ${buildroot}${_libdir}/ \;
+	install -m 0644 tensorflow/lite/kernels/*.h ${buildroot}${_includedir}/tensorflow/lite/kernels
+	install -m 0644 tensorflow/lite/c/*.h ${buildroot}${_includedir}/tensorflow/lite/c
+	install -m 0644 tensorflow/lite/core/*.h ${buildroot}${_includedir}/tensorflow/lite/core
+	install -m 0644 tensorflow/lite/core/api/*.h ${buildroot}${_includedir}/tensorflow/lite/core/api
+	install -m 0644 tensorflow/lite/tools/*.h ${buildroot}${_includedir}/tensorflow/lite/tools
+	install -m 0644 tensorflow/lite/schema/*.h ${buildroot}${_includedir}/tensorflow/lite/schema
+	install -m 0644 tensorflow/lite/profiling/*.h ${buildroot}${_includedir}/tensorflow/lite/profiling
+	install -m 0644 tensorflow/lite/tools/make/downloads/flatbuffers/include/flatbuffers/*.h ${buildroot}${_includedir}/flatbuffers
+
+	install -m 0644 tensorflow.pc ${buildroot}${_libdir}/pkgconfig/tensorflow-lite.pc
+	sed -i "s|-ltensorflow|-ltensorflow-lite|" ${buildroot}${_libdir}/pkgconfig/tensorflow-lite.pc
