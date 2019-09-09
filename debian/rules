@@ -8,8 +8,13 @@ TENSORFLOW_BUILD := no
 endif
 SHELL := /bin/bash
 
+ifeq ($(DEB_HOST_ARCH), amd64)
+CXXFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11 -msse4.2 -mfpmath=sse
+CFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -msse4.2 -mfpmath=sse
+else
 CXXFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11
 CFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC
+endif
 
 export TF_VERSION=1.13.1
 export BAZEL_OUTPUT=/tmp/bazel_output
