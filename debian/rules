@@ -9,11 +9,11 @@ endif
 SHELL := /bin/bash
 
 ifeq ($(DEB_HOST_ARCH), amd64)
-CXXFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11 -msse4.2 -mfpmath=sse
-CFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -msse4.2 -mfpmath=sse
+CXXFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11 -msse4.2 -mfpmath=sse
+CFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -msse4.2 -mfpmath=sse
 else
-CXXFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11
-CFLAGS = -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC
+CXXFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11
+CFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC
 endif
 
 export TF_VERSION=1.13.1
@@ -60,7 +60,7 @@ endif
 	$(SHELL) ${topdir}/tensorflow/c/generate-pc.sh -p /usr -l /lib -v ${TF_VERSION}
 
 override_dh_auto_install:
-	
+
 	install -d ${buildroot}
 	install -d ${buildroot}${_libdir}
 	install -d ${buildroot}${_libdir}/pkgconfig
