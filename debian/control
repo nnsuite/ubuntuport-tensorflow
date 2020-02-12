@@ -1,0 +1,47 @@
+Source: tensorflow
+Section: devel
+Priority: optional
+Maintainer: Hyoung Joo Ahn <hello.ahn@samsung.com>
+Build-Depends: 
+ debhelper (>=9),
+ bash-completion,
+ g++-5 | g++-6 | g++-7 | g++-8,
+ wget,
+ zlib1g-dev,
+ python-pip,
+ python-numpy,
+ python-wheel,
+ python-setuptools,
+ curl,
+ bazel-dist,
+ openjdk-8-jdk,
+ git,
+ python-dev,
+ python-future,
+Standards-Version: 1.15.2
+Homepage: https://github.sec.samsung.net/RS7-STAR/Tensorflow
+
+Package: tensorflow-c-dev
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, tensorflow-c
+Provides: tensorflow-dev
+Description: TensorFlow provides a C API that can be used
+ to build bindings for other languages. The API is defined
+ in c_api.h and designed for simplicity and uniformity
+ rather than convenience.
+
+Package: tensorflow-c
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Provides: tensorflow
+Description: TensorFlow provides a C API that can be used
+ to build bindings for other languages. The API is defined
+ in c_api.h and designed for simplicity and uniformity
+ rather than convenience.
+
+Package: tensorflow-lite-dev
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: Tensorflow Lite development headers and object file
+ This package contains the Tensorflow Lite development header and
+ static library.

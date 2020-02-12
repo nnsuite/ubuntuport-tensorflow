@@ -1,0 +1,3 @@
+/usr/include/tensorflow/c/*.h
+/usr/include/tensorflow/c/eager/*.h
+/usr/lib/pkgconfig/tensorflow.pc
