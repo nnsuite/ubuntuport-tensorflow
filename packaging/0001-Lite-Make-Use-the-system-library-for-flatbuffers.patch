@@ -1,0 +1,32 @@
+diff --git a/tensorflow/lite/tools/make/Makefile b/tensorflow/lite/tools/make/Makefile
+--- a/tensorflow/lite/tools/make/Makefile
++++ b/tensorflow/lite/tools/make/Makefile
+@@ -38,7 +38,6 @@ INCLUDES := \
+ -I$(MAKEFILE_DIR)/downloads/gemmlowp \
+ -I$(MAKEFILE_DIR)/downloads/neon_2_sse \
+ -I$(MAKEFILE_DIR)/downloads/farmhash/src \
+--I$(MAKEFILE_DIR)/downloads/flatbuffers/include \
+ -I$(OBJDIR)
+ # This is at the end so any globally-installed frameworks like protobuf don't
+ # override local versions in the source tree.
+@@ -50,7 +49,9 @@ LIBS := \
+ -lstdc++ \
+ -lpthread \
+ -lm \
+--lz
++-lz \
++-ldl \
++-lflatbuffers
+ 
+ # There are no rules for compiling objects for the host system (since we don't
+ # generate things like the protobuf compiler that require that), so all of
+@@ -121,8 +122,7 @@ $(wildcard tensorflow/lite/kernels/internal/optimized/*.cc) \
+ $(wildcard tensorflow/lite/kernels/internal/reference/*.cc) \
+ $(PROFILER_SRCS) \
+ tensorflow/lite/tools/make/downloads/farmhash/src/farmhash.cc \
+-tensorflow/lite/tools/make/downloads/fft2d/fftsg.c \
+-tensorflow/lite/tools/make/downloads/flatbuffers/src/util.cpp
++tensorflow/lite/tools/make/downloads/fft2d/fftsg.c
+ endif
+ # Remove any duplicates.
+ CORE_CC_ALL_SRCS := $(sort $(CORE_CC_ALL_SRCS))

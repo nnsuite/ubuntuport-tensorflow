@@ -1,0 +1,2 @@
+/usr/lib/@DEB_HOST_MULTIARCH@/libtensorflow_framework.so.1 /usr/lib/@DEB_HOST_MULTIARCH@/libtensorflow_framework.so
+/usr/lib/@DEB_HOST_MULTIARCH@/libtensorflow.so.1 /usr/lib/@DEB_HOST_MULTIARCH@/libtensorflow.so

@@ -1,0 +1,29 @@
+tensorflow (2.0.0-1) unstable xenial bionic; urgency=medium
+
+  * Update the version to 2.0.0
+
+ -- Hyoung Joo Ahn <hello.ahn@samsung.com>  Thu, 25 Mar 2020 14:25:21 +0900
+
+tensorflow (1.15.2-3) unstable xenial bionic; urgency=medium
+
+  * Make Tensorflow Lite use the system library for flatbuffers
+
+ -- Wook Song <wook16.song@samsung.com>  Wed, 11 Mar 2020 17:40:06 +0900
+
+tensorflow (1.15.2-2) unstable xenial bionic; urgency=medium
+
+  * Provide tensorflow-lite-dev containing the header and static library files
+
+ -- Wook Song <wook16.song@samsung.com>  Fri, 14 Feb 2020 14:36:10 +0900
+
+tensorflow (1.15.2-1) unstable xenial bionic; urgency=medium
+
+  * Update the version to 1.15.2
+
+ -- Hyoung Joo Ahn <hello.ahn@samsung.com>  Thu, 05 Feb 2020 15:33:21 +0900
+
+tensorflow (1.13.1) unstable xenial bionic; urgency=medium
+
+  * Initial debian dist files for tensorflow c_api are added
+
+ -- Hyoung Joo Ahn <hello.ahn@samsung.com>  Thu, 30 Jul 2019 15:25:01 +0900
