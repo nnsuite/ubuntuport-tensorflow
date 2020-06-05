@@ -1,4 +1,3 @@
-/usr/include/flatbuffers
 /usr/include/tensorflow/lite
 /usr/include/tensorflow/contrib/lite
 /usr/lib/libtensorflow-lite.a
