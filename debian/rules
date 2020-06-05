@@ -88,7 +88,6 @@ endif
 	install -d ${buildroot}${_includedir}/tensorflow/lite/tools
 	install -d ${buildroot}${_includedir}/tensorflow/lite/schema
 	install -d ${buildroot}${_includedir}/tensorflow/lite/profiling
-	install -d ${buildroot}${_includedir}/flatbuffers
 	install -d ${buildroot}${_includedir}/tensorflow/contrib
 	ln -sf ${_includedir}/tensorflow/lite ${buildroot}/${_includedir}/tensorflow/contrib/lite
 
@@ -101,7 +100,6 @@ endif
 	install -m 0644 tensorflow/lite/tools/*.h ${buildroot}${_includedir}/tensorflow/lite/tools
 	install -m 0644 tensorflow/lite/schema/*.h ${buildroot}${_includedir}/tensorflow/lite/schema
 	install -m 0644 tensorflow/lite/profiling/*.h ${buildroot}${_includedir}/tensorflow/lite/profiling
-	install -m 0644 tensorflow/lite/tools/make/downloads/flatbuffers/include/flatbuffers/*.h ${buildroot}${_includedir}/flatbuffers
 
 	install -m 0644 tensorflow.pc ${buildroot}${_libdir}/pkgconfig/tensorflow-lite.pc
 	sed -i "s|-ltensorflow|-ltensorflow-lite|" ${buildroot}${_libdir}/pkgconfig/tensorflow-lite.pc
