@@ -1,3 +1,9 @@
+tensorflow (1.13.1-beta) unstable xenial bionic; urgency=medium
+
+  * Remove flatbuffers headers from tensorflow-lite-dev package.
+
+ -- Gichan Jang <gichan2.jang@samsung.com>  Wed, 10 June 2020 14:00:00 +0900
+
 tensorflow (1.13.1) unstable xenial bionic; urgency=medium
 
   * Initial debian dist files for tensorflow c_api are added
