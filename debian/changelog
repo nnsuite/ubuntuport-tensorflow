@@ -2,7 +2,7 @@ tensorflow (1.13.1+nns1) unstable xenial bionic; urgency=medium
 
   * Remove flatbuffers headers from tensorflow-lite-dev package.
 
- -- Gichan Jang <gichan2.jang@samsung.com>  Wed, 10 June 2020 20:00:00 +0900
+ -- Gichan Jang <gichan2.jang@samsung.com>  Wed, 10 Jun 2020 20:00:00 +0900
 
 tensorflow (1.13.1) unstable xenial bionic; urgency=medium
 
