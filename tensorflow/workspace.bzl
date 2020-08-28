@@ -21,7 +21,6 @@ load(
     "def_file_filter_configure",
 )
 load("//third_party/aws:workspace.bzl", aws = "repo")
-load("//third_party/flatbuffers:workspace.bzl", flatbuffers = "repo")
 load("//third_party/highwayhash:workspace.bzl", highwayhash = "repo")
 load("//third_party/hwloc:workspace.bzl", hwloc = "repo")
 load("//third_party/icu:workspace.bzl", icu = "repo")
@@ -33,7 +32,6 @@ load("//third_party/keras_applications_archive:workspace.bzl", keras_application
 def initialize_third_party():
     """ Load third party repositories.  See above load() statements. """
     aws()
-    flatbuffers()
     highwayhash()
     hwloc()
     icu()

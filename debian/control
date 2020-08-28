@@ -2,7 +2,7 @@ Source: tensorflow
 Section: devel
 Priority: optional
 Maintainer: Hyoung Joo Ahn <hello.ahn@samsung.com>
-Build-Depends: 
+Build-Depends:
  debhelper (>=9),
  bash-completion,
  g++-5 | g++-6 | g++-7 | g++-8,
@@ -12,9 +12,9 @@ Build-Depends:
  python-numpy,
  python-wheel,
  python-setuptools,
- curl,
+ curl, libflatbuffers-dev, flatbuffers-compiler
 Standards-Version: 1.13.1
-Homepage: https://github.sec.samsung.net/RS7-STAR/Tensorflow
+Homepage: https://github.com/nnsuite/ubuntuport-tensorflow
 
 Package: tensorflow-c-dev
 Architecture: amd64
