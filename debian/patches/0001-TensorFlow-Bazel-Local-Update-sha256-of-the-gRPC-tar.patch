@@ -1,0 +1,31 @@
+From 7a3f7a79f93142aa42718943a075d2c2f9930ba0 Mon Sep 17 00:00:00 2001
+From: Wook Song <wook16.song@samsung.com>
+Date: Thu, 17 Dec 2020 11:17:28 +0900
+Subject: [PATCH 1/1] [TensorFlow/Bazel] Local: Update sha256 of the gRPC
+ tarball
+
+In order to work around a known bug [1] in gRPC, the existing gRPC
+tarball was replaced with the patched one. This patch changes the
+sha256 value of the old gRPC tarball to the newer one.
+
+Signed-off-by: Wook Song <wook16.song@samsung.com>
+---
+ tensorflow/workspace.bzl | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tensorflow/workspace.bzl b/tensorflow/workspace.bzl
+index dff151246a..9a2dda47d0 100644
+--- a/tensorflow/workspace.bzl
++++ b/tensorflow/workspace.bzl
+@@ -462,7 +462,7 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
+     # WARNING: make sure ncteisen@ and vpai@ are cc-ed on any CL to change the below rule
+     tf_http_archive(
+         name = "grpc",
+-        sha256 = "1aa84387232dda273ea8fdfe722622084f72c16f7b84bfc519ac7759b71cdc91",
++        sha256 = "fd645d320e96f01218fda2c1627945ccf081964c2792bddc52508d65b53447b6",
+         strip_prefix = "grpc-69b6c047bc767b4d80e7af4d00ccb7c45b683dae",
+         system_build_file = clean_dep("//third_party/systemlibs:grpc.BUILD"),
+         urls = [
+-- 
+2.17.1
+
