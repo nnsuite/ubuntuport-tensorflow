@@ -1,3 +1,9 @@
+tensorflow (1.13.1+nns2) unstable; urgency=medium
+
+  * Revise debian packaging files to support Focal
+
+ -- Wook Song <wook16.song@samsung.com>  Tue, 17 Dec 2020 11:34:40 +0900
+
 tensorflow (1.13.1+nns1) unstable xenial bionic; urgency=medium
 
   * Remove flatbuffers headers from tensorflow-lite-dev package.

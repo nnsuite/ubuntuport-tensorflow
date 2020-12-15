@@ -2,19 +2,20 @@ Source: tensorflow
 Section: devel
 Priority: optional
 Maintainer: Hyoung Joo Ahn <hello.ahn@samsung.com>
-Build-Depends: 
+Build-Depends:
  debhelper (>=9),
  bash-completion,
  g++-5 | g++-6 | g++-7 | g++-8,
  wget,
  zlib1g-dev,
- python-pip,
- python-numpy,
- python-wheel,
- python-setuptools,
+ python-minimal | python-is-python3,
+ python-numpy | python3-numpy,
+ python-wheel | python3-wheel,
+ python-setuptools | python3-setuptools,
  curl,
-Standards-Version: 1.13.1
-Homepage: https://github.sec.samsung.net/RS7-STAR/Tensorflow
+ quilt
+Standards-Version: 4.5.1.0
+Homepage: https://www.tensorflow.org
 
 Package: tensorflow-c-dev
 Architecture: amd64
