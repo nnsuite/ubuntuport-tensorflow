@@ -1,3 +1,9 @@
+tensorflow (1.13.1+nns3) UNRELEASED; urgency=medium
+
+  * Backport protobuf to v3.12.3
+
+ -- Sangjung Woo <sangjung.woo@samsung.com>  Wed, 30 Dec 2020 14:33:47 +0900
+
 tensorflow (1.13.1+nns2) unstable; urgency=medium
 
   * Revise debian packaging files to support Focal
