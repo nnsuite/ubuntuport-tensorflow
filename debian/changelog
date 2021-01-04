@@ -1,3 +1,10 @@
+tensorflow (1.13.1+nns3) unstable; urgency=medium
+
+  * Instead of bundled ProtoBuf 3.6.1, Use system libraries of ProtoBuf
+    3.12.3, which is published by the NNStreamer PPA
+
+ -- Wook Song <wook16.song@samsung.com>  Wed, 30 Dec 2020 15:25:59 +0900
+
 tensorflow (1.13.1+nns2) unstable; urgency=medium
 
   * Revise debian packaging files to support Focal

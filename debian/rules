@@ -44,7 +44,7 @@ endif
 override_dh_auto_build:
 ifeq ($(TENSORFLOW_BUILD), yes)
 	# If it's eoan (19.10), gcc-9 has some regressions. Use gcc-8 instead if it's eoan.
-	if [ -f /usr/bin/gcc-8 ]; then export CC=gcc-8; export CXX=g++-8; fi; ${topdir}/temp/usr/bin/bazel --output_user_root=${BAZEL_OUTPUT} build --verbose_failures --repository_cache=${packagingdir} --distdir=${packagingdir} -c opt //tensorflow/tools/lib_package:libtensorflow
+	if [ -f /usr/bin/gcc-8 ]; then export CC=gcc-8; export CXX=g++-8; fi; TF_SYSTEM_LIBS=protobuf_archive ${topdir}/temp/usr/bin/bazel --output_user_root=${BAZEL_OUTPUT} build --verbose_failures --repository_cache=${packagingdir} --distdir=${packagingdir} -c opt //tensorflow/tools/lib_package:libtensorflow
 endif
 
 	cd tensorflow/lite/tools/make && tar -xf ${packagingdir}/downloads.tar.gz

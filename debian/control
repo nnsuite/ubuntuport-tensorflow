@@ -8,6 +8,8 @@ Build-Depends:
  g++-5 | g++-6 | g++-7 | g++-8,
  wget,
  zlib1g-dev,
+ libprotobuf-dev, libprotoc-dev,
+ protobuf-compiler,
  python-minimal | python-is-python3,
  python-numpy | python3-numpy,
  python-wheel | python3-wheel,
