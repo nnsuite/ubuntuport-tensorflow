@@ -1,3 +1,9 @@
+tensorflow (1.13.1+nns4) unstable; urgency=medium
+
+  * Publish the tensorflow package with protobuf 3.14.0
+
+ -- Dongju Chae <dongju.chae@samsung.com>  Wed, 03 Mar 2021 12:50:00 +0900
+
 tensorflow (1.13.1+nns3) unstable; urgency=medium
 
   * Instead of bundled ProtoBuf 3.6.1, Use system libraries of ProtoBuf
