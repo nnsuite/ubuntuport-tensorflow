@@ -9,11 +9,11 @@ endif
 SHELL := /bin/bash
 
 ifeq ($(DEB_HOST_ARCH), amd64)
-CXXFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11 -msse4.2 -mfpmath=sse
-CFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -msse4.2 -mfpmath=sse
+CXXFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -Wno-error -fPIC -std=c++11 -msse4.2 -mfpmath=sse
+CFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -Wno-error -fPIC -msse4.2 -mfpmath=sse
 else
-CXXFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC -std=c++11
-CFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -fPIC
+CXXFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -Wno-error -fPIC -std=c++11
+CFLAGS = -O2 -Wno-sign-compare -Wno-unused-but-set-variable -Wno-format-security -Wno-format -Wno-error -fPIC
 endif
 
 export TF_VERSION=1.13.1
