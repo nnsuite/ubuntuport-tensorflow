@@ -15,6 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_PROFILING_PROFILE_SUMMARY_FORMATTER_H_
 #define TENSORFLOW_LITE_PROFILING_PROFILE_SUMMARY_FORMATTER_H_
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
