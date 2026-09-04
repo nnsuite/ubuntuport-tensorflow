@@ -1,0 +1,5 @@
+Name: tensorflow-lite
+Description: This is a standalone package of TensorFlow Lite.
+Version: 2.15.0
+Libs: -L@libdir@ -ltensorflow2-lite
+Cflags: -I@includedir@

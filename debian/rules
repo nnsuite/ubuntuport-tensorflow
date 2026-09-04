@@ -1,0 +1,75 @@
+#!/usr/bin/make -f
+export DH_VERBOSE=1
+export BUILDDIR=build
+export DESTDIR=$(CURDIR)/debian/tmp
+export DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+SHELL := /bin/bash
+
+_libdir ?= /usr/lib
+_includedir ?= /usr/include
+_bindir ?= /usr/bin
+
+ifeq ($(DEB_HOST_ARCH), arm64)
+EXTRA_CFLAGS = -funsafe-math-optimizations
+EXTRA_CXXFLAGS = -funsafe-math-optimizations
+endif
+
+ifeq ($(DEB_HOST_ARCH), armhf)
+EXTRA_CFLAGS = -funsafe-math-optimizations -mfp16-format=ieee
+EXTRA_CXXFLAGS = -funsafe-math-optimizations -mfp16-format=ieee
+endif
+
+%:
+	dh $@ --parallel
+
+override_dh_auto_configure:
+	mkdir -p externals
+	cp ./packaging/*.tar.gz ./externals/
+
+	mkdir -p $(BUILDDIR)
+	cd $(BUILDDIR) && cmake \
+	-DCMAKE_VERBOSE_MAKEFILE=ON \
+	-GNinja \
+	-DCMAKE_C_FLAGS="${EXTRA_CFLAGS}" \
+	-DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS}" \
+	-DTFLITE_BUILD_SHARED_LIB=OFF \
+	-DTFLITE_ENABLE_XNNPACK=ON \
+	-DXNNPACK_ENABLE_ARM_BF16=OFF \
+	-DXNNPACK_ENABLE_ARM_I8MM=OFF \
+	-DTFLITE_ENABLE_GPU=ON \
+	../tensorflow/lite
+
+override_dh_auto_build:
+	cd $(BUILDDIR) && \
+		cmake --build . && \
+		cmake --build . -t benchmark_model
+
+override_dh_auto_install:
+	mkdir -p ${DESTDIR}
+	mkdir -p ${DESTDIR}${_libdir}
+	mkdir -p ${DESTDIR}${_libdir}/pkgconfig
+	mkdir -p ${DESTDIR}${_includedir}
+	mkdir -p ${DESTDIR}${_bindir}
+
+	mkdir -p ${DESTDIR}${_includedir}/tensorflow2/lite
+	ln -sf . ${DESTDIR}${_includedir}/tensorflow2/tensorflow
+
+	cp ./packaging/tensorflow2-lite.pc.in .
+	sed -i 's:@libdir@:${_libdir}:g' ./tensorflow2-lite.pc.in
+	sed -i 's:@includedir@:${_includedir}/tensorflow2/:g' ./tensorflow2-lite.pc.in
+
+	install -m 0644 ./build/libtensorflow-lite-bundled.a ${DESTDIR}${_libdir}/libtensorflow2-lite.a
+	install -m 0655 ./build/tools/benchmark/benchmark_model ${DESTDIR}${_bindir}/tflite_benchmark_model
+
+## install headers
+	cd tensorflow/lite && find . -name "*.h" -type f -exec cp --parents {} ${DESTDIR}${_includedir}/tensorflow2/lite \;
+
+## rename tensorflow -> tensorflow2
+	pushd ${DESTDIR}${_includedir}/tensorflow2/ && for H in `find -name '*.h'`; do sed -i 's|#\W*include\W*<tensorflow/|#include <tensorflow2/|' $${H} ; sed -i 's|#\W*include\W*"tensorflow/|#include "tensorflow2/|' $${H};  done; popd
+
+## install pc file
+	install -m 0644 tensorflow2-lite.pc.in ${DESTDIR}${_libdir}/pkgconfig/tensorflow2-lite.pc
+
+override_dh_auto_clean:
+	rm -rf build

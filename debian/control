@@ -1,0 +1,25 @@
+Source: tensorflow2
+Section: devel
+Priority: optional
+Maintainer: Yongjoo Ahn <yongjoo1.ahn@samsung.com>
+Uploaders: Sangjung Woo <sangjung.woo@samsung.com>
+Build-Depends:
+ debhelper (>=9),
+ cmake (>=3.16),
+ ninja-build,
+ bash-completion,
+ g++-10 | g++-11 | g++-12 | g++,
+ wget,
+ zlib1g-dev,
+ curl,
+# https://www.debian.org/doc/debian-policy/index.html  (Debian Policy version 4.5.0.3)
+Standards-Version: 4.5.0.3
+Homepage: https://github.com/tensorflow/tensorflow
+
+
+Package: tensorflow2-lite-dev
+Architecture: any
+Depends: libflatbuffers-dev, ${shlibs:Depends}
+Description: Tensorflow Lite development headers and object files
+ This package contains the development header files (*.h) and
+ static library (*.a) for Tensorflow Lite.
